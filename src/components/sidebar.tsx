@@ -43,6 +43,16 @@ const NAV_ITEMS = [
     ),
   },
   {
+    label: "Prompt Packs",
+    href: "/briefs",
+    icon: (
+      <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5A3.375 3.375 0 0010.125 2.25H8.25m2.25 0H5.625A1.875 1.875 0 003.75 4.125v15.75a1.875 1.875 0 001.875 1.875h12.75a1.875 1.875 0 001.875-1.875V11.25a9 9 0 00-9-9z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25h6M7.5 17.25h9" />
+      </svg>
+    ),
+  },
+  {
     label: "Dashboard",
     href: "/dashboard",
     icon: (

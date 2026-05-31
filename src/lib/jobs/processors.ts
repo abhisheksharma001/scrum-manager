@@ -1,20 +1,137 @@
-import { enqueueJiraCreation } from "./queue";
+import { enqueueJiraCreation, enqueueRepoAnalysis, enqueueBriefDelivery } from "./queue";
 import type {
   TranscriptProcessingJob,
   JiraCreationJob,
   MaintenanceJob,
+  RepoAnalysisJob,
+  BriefDeliveryJob,
 } from "./queue";
 import { extractTasks, storeAndRouteExtractedTasks } from "@/lib/services/extraction";
 import { updateTranscriptStatus, getTranscript } from "@/lib/services/ingestion";
 import { getIssueTracker } from "@/lib/issue-tracker";
 import { routeTaskToProject } from "@/lib/agents/routing-agent";
 import { expireStaleClaims, expireOldInterviews } from "@/lib/services/interview-queue";
-import { notifyNewInterviews, notifyAutoCreatedTasks, notifyPushFailed } from "@/lib/services/notifications";
+import {
+  notifyNewInterviews,
+  notifyAutoCreatedTasks,
+  notifyPushFailed,
+  notify,
+} from "@/lib/services/notifications";
 import { supabaseAdmin } from "@/lib/supabase";
 import { logger } from "@/lib/logger";
+import { createBrief, getApprovalMode, setBriefStatus, getBriefConfig, getBrief } from "@/lib/services/developer-brief";
+import { analyzeBrief } from "@/lib/services/repo-analysis";
+import { renderBriefPlainText } from "@/lib/services/brief-renderer";
 import type { NormalizedTranscript, TranscriptProvider } from "@/lib/types";
+import type { DeveloperBrief } from "@/lib/types";
 
 const log = logger.child({ service: "worker" });
+
+function classifyRepoAnalysisError(errorMessage: string): string {
+  if (
+    errorMessage.includes("GitHub API error 401") ||
+    errorMessage.includes("GitHub API error 403") ||
+    errorMessage.includes("Repo not allowlisted") ||
+    errorMessage.includes("GITHUB_READONLY_TOKEN")
+  ) {
+    return "github_access_denied";
+  }
+  return "generation_failed";
+}
+
+async function sendBriefSlackMessage(payload: {
+  title: string;
+  trackerKey: string | null;
+  trackerUrl: string | null;
+  briefUrl: string;
+}): Promise<string | null> {
+  const webhookUrl = process.env.SLACK_WEBHOOK_URL;
+  if (!webhookUrl) {
+    return "SLACK_WEBHOOK_URL is not configured";
+  }
+
+  const blocks = [
+    {
+      type: "header",
+      text: { type: "plain_text", text: `Developer prompt pack ready: ${payload.title}` },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: payload.trackerKey && payload.trackerUrl
+          ? `Tracker: <${payload.trackerUrl}|${payload.trackerKey}>\nIncludes implementation logic and a copy-paste Codex / Claude Code prompt.`
+          : "Tracker: N/A\nIncludes implementation logic and a copy-paste Codex / Claude Code prompt.",
+      },
+    },
+    {
+      type: "actions",
+      elements: [
+        {
+          type: "button",
+          text: { type: "plain_text", text: "Open Prompt Pack" },
+          url: payload.briefUrl,
+          style: "primary",
+        },
+      ],
+    },
+  ];
+
+  const response = await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ blocks }),
+  });
+
+  if (!response.ok) {
+    return `Slack webhook failed with status ${response.status}`;
+  }
+  return null;
+}
+
+async function addJiraBriefComment(input: {
+  issueKey: string;
+  trackerUrl: string | null;
+  brief: DeveloperBrief;
+}): Promise<string | null> {
+  const baseUrl = process.env.JIRA_BASE_URL;
+  const email = process.env.JIRA_EMAIL;
+  const token = process.env.JIRA_API_TOKEN;
+  if (!baseUrl || !email || !token) {
+    return "Jira credentials are not configured for comment delivery";
+  }
+
+  const lines = renderBriefPlainText(input.brief, input.trackerUrl).split("\n");
+
+  const adf = {
+    type: "doc",
+    version: 1,
+    content: lines.map((line) => ({
+      type: "paragraph",
+      content: [{ type: "text", text: line }],
+    })),
+  };
+
+  const auth = Buffer.from(`${email}:${token}`).toString("base64");
+  const response = await fetch(
+    `${baseUrl}/rest/api/3/issue/${encodeURIComponent(input.issueKey)}/comment`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ body: adf }),
+    }
+  );
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    return `Jira comment failed with status ${response.status}${body ? `: ${body}` : ""}`;
+  }
+  return null;
+}
 
 function safeParseConfig<T>(value: unknown, fallback: T): T {
   try {
@@ -137,6 +254,16 @@ export async function processJiraCreation(data: JiraCreationJob) {
     const result = await getIssueTracker().createIssue(task, resolvedProject);
     jobLog.info({ issueKey: result.issueKey, project: resolvedProject }, "Jira issue created");
 
+    try {
+      const createdBrief = await createBrief(task.id, result.issueKey);
+      const mode = await getApprovalMode();
+      if (mode !== "gate") {
+        await enqueueRepoAnalysis({ briefId: createdBrief.id });
+      }
+    } catch (briefErr) {
+      jobLog.warn({ err: briefErr }, "Jira issue created, but developer brief setup failed");
+    }
+
     const transcript = await getTranscript(task.transcript_id);
     if (transcript) {
       await notifyAutoCreatedTasks(transcript, [
@@ -155,6 +282,101 @@ export async function processJiraCreation(data: JiraCreationJob) {
     await notifyPushFailed(taskId, task.extracted_title, errorMessage);
     throw err;
   }
+}
+
+export async function processRepoAnalysis(data: RepoAnalysisJob) {
+  try {
+    await analyzeBrief(data.briefId);
+    const updated = await getBrief(data.briefId);
+    const mode = await getApprovalMode();
+    const minConfidence = await getBriefConfig<"high" | "medium" | "low" | "none">(
+      "auto_send_min_confidence",
+      "high"
+    );
+    const order = { none: 0, low: 1, medium: 2, high: 3 };
+    const canAutoSend = updated.confidence && order[updated.confidence] >= order[minConfidence];
+    if (updated.status === "awaiting_pm_review" && (mode === "auto" || (mode === "confidence" && canAutoSend))) {
+      await setBriefStatus(updated.id, "sending");
+      await enqueueBriefDelivery({ briefId: updated.id });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await setBriefStatus(data.briefId, "failed", {
+      error_code: classifyRepoAnalysisError(message),
+      error_detail: message,
+    });
+  }
+}
+
+export async function processBriefDelivery(data: BriefDeliveryJob) {
+  const brief = await getBrief(data.briefId);
+  const { data: task } = await supabaseAdmin.from("extracted_tasks").select("*").eq("id", brief.task_id).single();
+  if (!task || !brief.brief) throw new Error("Brief delivery context missing");
+
+  const trackerUrl = task.tracker_issue_key ? `${process.env.JIRA_BASE_URL}/browse/${task.tracker_issue_key}` : null;
+  const errors: string[] = [];
+  const delivery: Record<string, unknown> = {};
+
+  if (!task.tracker_issue_key) {
+    errors.push("Task does not have a tracker issue key for comment delivery");
+  } else {
+    const jiraError = await addJiraBriefComment({
+      issueKey: task.tracker_issue_key,
+      trackerUrl,
+      brief: brief.brief,
+    });
+    if (jiraError) {
+      errors.push(jiraError);
+      delivery.jira = "failed";
+    } else {
+      delivery.jira = "sent";
+    }
+  }
+
+  try {
+    const { sendBriefEmail } = await import("@/lib/services/email");
+    await sendBriefEmail({
+      to: task.inferred_assignees?.[0]?.email,
+      subject: `Developer prompt pack: ${task.extracted_title}`,
+      brief: brief.brief,
+      trackerUrl,
+    });
+    delivery.email = task.inferred_assignees?.[0]?.email ? "sent" : "skipped_no_recipient";
+  } catch (err) {
+    errors.push(`Email delivery failed: ${err instanceof Error ? err.message : String(err)}`);
+    delivery.email = "failed";
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const slackError = await sendBriefSlackMessage({
+    title: task.extracted_title,
+    trackerKey: task.tracker_issue_key ?? null,
+    trackerUrl,
+    briefUrl: `${appUrl}/briefs`,
+  });
+  if (slackError) {
+    errors.push(slackError);
+    delivery.slack = "failed";
+  } else {
+    delivery.slack = "sent";
+  }
+
+  await notify(
+    {
+      type: "auto_pushed",
+      title: `Developer prompt pack ready: ${task.extracted_title}`,
+      body: `Tracker: ${task.tracker_issue_key ?? "N/A"}`,
+      link: `/briefs`,
+      metadata: { briefId: brief.id, delivery },
+    },
+    { slack: false }
+  );
+
+  await setBriefStatus(brief.id, errors.length > 0 ? "failed" : "sent", {
+    error_code: errors.length > 0 ? "delivery_failed" : null,
+    error_detail: errors.length > 0 ? errors.join(" | ") : null,
+    delivery,
+  });
 }
 
 /**

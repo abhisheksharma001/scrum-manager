@@ -44,6 +44,97 @@ export type TaskStatus =
   | "expired"
   | "jira_failed";
 
+export type BriefStatus =
+  | "queued"
+  | "analyzing"
+  | "awaiting_pm_review"
+  | "needs_human_direction"
+  | "sending"
+  | "sent"
+  | "rejected"
+  | "failed";
+
+export type BriefConfidence = "high" | "medium" | "low" | "none";
+
+export interface ProjectRepoMapping {
+  id: string;
+  project_key: string;
+  repo_full_name: string;
+  is_primary: boolean;
+  paths_hint: string | null;
+  created_at: string;
+}
+
+export interface DeveloperBrief {
+  task_name: string;
+  assignee: string | null;
+  tracker_key: string | null;
+  tracker_url: string | null;
+  repos: string[];
+  files_likely_involved: Array<{ path: string; reason: string }>;
+  existing_code_summary: string;
+  task_restated: string;
+  suggested_approach: string[];
+  key_considerations: string[];
+  risks: string[];
+  estimated_complexity: {
+    level: "trivial" | "small" | "medium" | "large" | "unknown";
+    rationale: string;
+  };
+  dependencies: string[];
+  suggested_tests: string[];
+  execution_pack?: {
+    plain_language_logic: string[];
+    technical_logic: Array<{
+      area: string;
+      change: string;
+      notes?: string;
+    }>;
+    implementation_steps: string[];
+    code_guidance: Array<{
+      file: string | null;
+      guidance: string;
+      example?: string;
+    }>;
+    tests_to_run: string[];
+    agent_prompt: string;
+  };
+  sample_snippets?: Array<{
+    path: string | null;
+    language: string;
+    code: string;
+    purpose: string;
+  }>;
+  confidence: BriefConfidence;
+  missing_info: string[];
+}
+
+export interface DeveloperBriefRow {
+  id: string;
+  task_id: string;
+  tracker_issue_key: string | null;
+  status: BriefStatus;
+  repos: string[];
+  analyzed_commit_sha: string | null;
+  candidate_files: Array<{ path: string; score?: number; reason?: string }>;
+  brief: DeveloperBrief | null;
+  confidence: BriefConfidence | null;
+  missing_info: string[];
+  model: string | null;
+  token_usage: Record<string, unknown> | null;
+  tool_calls: number;
+  bytes_read: number;
+  attempt: number;
+  pm_reviewer: string | null;
+  pm_reviewed_at: string | null;
+  pm_action: string | null;
+  delivery: Record<string, unknown>;
+  error_code: string | null;
+  error_detail: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ExtractedTask {
   title: string;
   description: string;
@@ -161,4 +252,7 @@ export const CONFIG_KEYS = {
   NOTIFICATION_CHANNELS: "notification_channels",
   DUPLICATE_SIMILARITY_THRESHOLD: "duplicate_similarity_threshold",
   PROJECT_ROUTES: "project_routes",
+  BRIEF_APPROVAL_MODE: "brief_approval_mode",
+  AUTO_SEND_MIN_CONFIDENCE: "auto_send_min_confidence",
+  BRIEF_BUDGET: "brief_budget",
 } as const;

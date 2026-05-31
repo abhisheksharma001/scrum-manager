@@ -5,6 +5,7 @@ import {
   interviewCompletionSchema,
   requirementsOutputSchema,
   routingOutputSchema,
+  developerBriefSchema,
   confidenceSchema,
   prioritySchema,
 } from "../schemas";
@@ -202,5 +203,58 @@ describe("routingOutputSchema", () => {
     expect(() =>
       routingOutputSchema.parse({ projectKey: "ENG" })
     ).toThrow();
+  });
+});
+
+describe("developerBriefSchema", () => {
+  const validBrief = {
+    task_name: "Improve repo retrieval",
+    assignee: "Alex",
+    tracker_key: "ENG-123",
+    tracker_url: "https://jira.example/browse/ENG-123",
+    repos: ["ellavox-ai/Tandem"],
+    files_likely_involved: [
+      { path: "src/lib/services/repo-analysis.ts", reason: "Owns the retrieval pipeline" },
+    ],
+    existing_code_summary: "The current pipeline searches GitHub and fetches full candidate files.",
+    task_restated: "Make repo analysis cheaper and easier for a coding agent to execute.",
+    suggested_approach: ["Add an execution pack to the generated brief"],
+    key_considerations: ["Keep v1 brief-only and read-only"],
+    risks: ["The agent prompt could become too generic if not grounded in files"],
+    estimated_complexity: { level: "small" as const, rationale: "Mostly schema and rendering changes" },
+    dependencies: ["Vercel AI SDK structured output"],
+    suggested_tests: ["Run schema validation tests"],
+    execution_pack: {
+      plain_language_logic: ["Give developers instructions and a prompt, not a code dump."],
+      technical_logic: [
+        {
+          area: "Brief schema",
+          change: "Add execution_pack with implementation logic and agent_prompt",
+        },
+      ],
+      implementation_steps: ["Update schema", "Render execution pack"],
+      code_guidance: [
+        {
+          file: "src/lib/agents/schemas.ts",
+          guidance: "Keep the prompt pack structured so delivery renderers can reuse it.",
+          example: "execution_pack: executionPackSchema",
+        },
+      ],
+      tests_to_run: ["pnpm test -- schemas"],
+      agent_prompt:
+        "You are working in the Tandem codebase. Read the Scrum Relief brief schema and rendering files first. Implement an execution pack that includes plain-language logic, technical logic, tests, and a copy-paste coding-agent prompt. Keep the change brief-only, read-only, and focused. Run the relevant schema and TypeScript tests before finishing.",
+    },
+    confidence: "high" as const,
+    missing_info: [],
+  };
+
+  it("requires an execution pack with a copy-paste agent prompt", () => {
+    const result = developerBriefSchema.parse(validBrief);
+    expect(result.execution_pack.agent_prompt).toContain("Tandem codebase");
+  });
+
+  it("rejects brief output without execution_pack", () => {
+    const { execution_pack: _executionPack, ...withoutPack } = validBrief;
+    expect(() => developerBriefSchema.parse(withoutPack)).toThrow();
   });
 });

@@ -30,6 +30,8 @@ export function getRedisConnection() {
 export const TOPIC_NAMES = {
   TRANSCRIPT_PROCESSING: "transcript-processing",
   JIRA_CREATION: "jira-creation",
+  REPO_ANALYSIS: "repo-analysis",
+  BRIEF_DELIVERY: "brief-delivery",
 } as const;
 
 // ─── Job Types ───────────────────────────────────────────────────────────────
@@ -61,6 +63,14 @@ export interface MaintenanceJob {
   type: "expire-claims" | "expire-interviews";
 }
 
+export interface RepoAnalysisJob {
+  briefId: string;
+}
+
+export interface BriefDeliveryJob {
+  briefId: string;
+}
+
 // ─── Job Dispatchers (Vercel Queues) ─────────────────────────────────────────
 
 export async function enqueueTranscriptProcessing(
@@ -82,5 +92,21 @@ export async function enqueueJiraCreation(
     { messageId, taskId: data.taskId },
     "Enqueued Jira creation"
   );
+  return messageId;
+}
+
+export async function enqueueRepoAnalysis(
+  data: RepoAnalysisJob
+): Promise<string | null> {
+  const { messageId } = await send(TOPIC_NAMES.REPO_ANALYSIS, data);
+  log.info({ messageId, briefId: data.briefId }, "Enqueued repo analysis");
+  return messageId;
+}
+
+export async function enqueueBriefDelivery(
+  data: BriefDeliveryJob
+): Promise<string | null> {
+  const { messageId } = await send(TOPIC_NAMES.BRIEF_DELIVERY, data);
+  log.info({ messageId, briefId: data.briefId }, "Enqueued brief delivery");
   return messageId;
 }

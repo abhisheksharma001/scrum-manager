@@ -35,6 +35,18 @@ export default function SettingsPage() {
           <ProjectRoutes />
         </div>
       </div>
+
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
+        <div className="border-b border-[var(--border)] px-5 py-4">
+          <h2 className="text-[15px] font-semibold">Scrum Relief</h2>
+          <p className="text-[12px] text-[var(--foreground-tertiary)] mt-0.5">
+            Configure repo-aware developer briefs
+          </p>
+        </div>
+        <div className="px-5 py-5">
+          <ScrumReliefSettings />
+        </div>
+      </div>
     </div>
   );
 }
@@ -186,6 +198,174 @@ function ConfidenceThresholdControl() {
             confidence tasks go through the interview queue.
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Scrum Relief Settings ────────────────────────────────────────────────
+
+interface ProjectRepo {
+  project_key: string;
+  repo_full_name: string;
+  is_primary?: boolean;
+  paths_hint?: string | null;
+}
+
+function ScrumReliefSettings() {
+  const [approvalMode, setApprovalMode] = useState("gate");
+  const [minConfidence, setMinConfidence] = useState("high");
+  const [repos, setRepos] = useState<ProjectRepo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/config").then((r) => r.json()),
+      fetch("/api/project-repos").then((r) => r.json()),
+    ])
+      .then(([configData, repoData]) => {
+        const mode = configData.config?.brief_approval_mode;
+        const confidence = configData.config?.auto_send_min_confidence;
+        if (typeof mode === "string") setApprovalMode(mode);
+        if (typeof confidence === "string") setMinConfidence(confidence);
+        setRepos(repoData.repos || []);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const persistConfig = async (key: string, value: string) => {
+    await fetch(`/api/config/${key}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value }),
+    });
+  };
+
+  const persistRepos = async (next: ProjectRepo[]) => {
+    await fetch("/api/project-repos", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repos: next }),
+    });
+  };
+
+  const saveAll = async () => {
+    setSaving(true);
+    setSaved(false);
+    try {
+      await Promise.all([
+        persistConfig("brief_approval_mode", approvalMode),
+        persistConfig("auto_send_min_confidence", minConfidence),
+        persistRepos(repos),
+      ]);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addRepo = () => {
+    setRepos([...repos, { project_key: "ENG", repo_full_name: "", is_primary: repos.length === 0, paths_hint: "" }]);
+  };
+
+  const updateRepo = (idx: number, patch: Partial<ProjectRepo>) => {
+    setRepos(repos.map((repo, i) => (i === idx ? { ...repo, ...patch } : repo)));
+  };
+
+  const removeRepo = (idx: number) => {
+    setRepos(repos.filter((_, i) => i !== idx));
+  };
+
+  if (loading) {
+    return <div className="h-40 skeleton rounded-lg" />;
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="grid gap-3 md:grid-cols-2">
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--foreground-tertiary)]">Approval Mode</span>
+          <select value={approvalMode} onChange={(e) => setApprovalMode(e.target.value)} className="w-full">
+            <option value="gate">Gate: PM approves analysis and delivery</option>
+            <option value="confidence">Confidence: high confidence can auto-send</option>
+            <option value="auto">Auto: send every generated brief</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--foreground-tertiary)]">Auto-send threshold</span>
+          <select value={minConfidence} onChange={(e) => setMinConfidence(e.target.value)} className="w-full">
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+            <option value="none">None</option>
+          </select>
+        </label>
+      </div>
+
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[13px] text-[var(--foreground-secondary)]">
+          Map tracker projects to GitHub repositories the brief agent may read.
+        </p>
+        <button
+          onClick={addRepo}
+          className="shrink-0 rounded-lg border border-[var(--border)] px-3 py-1.5 text-[11px] font-semibold text-[var(--foreground-secondary)] hover:bg-[var(--surface-hover)]"
+        >
+          Add Repo
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {repos.map((repo, idx) => (
+          <div key={idx} className="grid gap-2 rounded-xl border border-[var(--border)] bg-[var(--background-secondary)] p-3 md:grid-cols-[90px_1fr_1fr_auto_auto]">
+            <input
+              value={repo.project_key}
+              onChange={(e) => updateRepo(idx, { project_key: e.target.value.toUpperCase() })}
+              placeholder="ENG"
+              className="font-mono"
+            />
+            <input
+              value={repo.repo_full_name}
+              onChange={(e) => updateRepo(idx, { repo_full_name: e.target.value })}
+              placeholder="org/repo"
+              className="font-mono"
+            />
+            <input
+              value={repo.paths_hint || ""}
+              onChange={(e) => updateRepo(idx, { paths_hint: e.target.value })}
+              placeholder="src/lib"
+              className="font-mono"
+            />
+            <label className="flex items-center gap-2 text-[12px] text-[var(--foreground-secondary)]">
+              <input
+                type="checkbox"
+                checked={Boolean(repo.is_primary)}
+                onChange={(e) => updateRepo(idx, { is_primary: e.target.checked })}
+              />
+              Primary
+            </label>
+            <button
+              onClick={() => removeRepo(idx)}
+              className="rounded-md px-2 py-1 text-[11px] text-[var(--danger)] hover:bg-[var(--danger-muted)]"
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button
+          onClick={saveAll}
+          disabled={saving}
+          className="rounded-lg bg-[var(--accent)] px-4 py-2 text-[12px] font-semibold text-white hover:bg-[var(--accent-hover)] disabled:opacity-40"
+        >
+          {saving ? "Saving..." : "Save Scrum Relief"}
+        </button>
+        {saved && <span className="text-[11px] text-[var(--success)]">Saved.</span>}
       </div>
     </div>
   );
