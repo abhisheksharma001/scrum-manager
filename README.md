@@ -199,13 +199,13 @@ Ellavox handles the hardest handoff in the chain: **unstructured conversation â†
 
 ```bash
 # Install
-npm install
+pnpm install
 
 # Start everything (Supabase, Redis, worker, dev server)
-npm run dev:all
+pnpm dev:all
 
 # Or just the Next.js dev server
-npm run dev
+pnpm dev
 ```
 
 Copy `.env.example` to `.env` and fill in your keys. At minimum you need Supabase credentials and an Anthropic API key. Add Jira credentials to enable ticket creation, Slack webhook URL for notifications.

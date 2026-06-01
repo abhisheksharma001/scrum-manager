@@ -1,6 +1,7 @@
 {
   "name": "orchaestaror",
   "version": "1.0.0",
+  "packageManager": "pnpm@11.1.2",
   "description": "Ellavox Meeting Intelligence Pipeline",
   "scripts": {
     "dev": "next dev",
@@ -10,6 +11,7 @@
     "dev:all": "./scripts/dev.sh",
     "stop": "./scripts/stop.sh",
     "test": "vitest run",
+    "test:pipeline": "vitest run test/pipeline-smoke.test.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "prepare": "husky"
@@ -46,7 +48,6 @@
     "tailwindcss": "^4.2.2",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2",
-    "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.1.2"
   }
 }

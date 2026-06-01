@@ -187,7 +187,7 @@ export default function SetupPage() {
 
       <SectionCard id="supabase" title="Supabase (Database)" status={s("supabase")}>
         <p className="text-[13px] text-[var(--foreground-secondary)]">
-          For local development, <code className="text-[11px] font-mono text-[var(--accent)]">npm run dev:all</code> starts Supabase automatically via Docker.
+          For local development, <code className="text-[11px] font-mono text-[var(--accent)]">pnpm dev:all</code> starts Supabase automatically via Docker.
         </p>
         <div className="flex flex-col gap-1.5">
           <EnvVar name="SUPABASE_URL" placeholder="https://your-project.supabase.co" />
@@ -235,7 +235,7 @@ export default function SetupPage() {
         <div className="flex flex-col gap-4">
           <Step n={1}>
             <p><strong className="text-[var(--foreground)]">Install dependencies:</strong></p>
-            <pre className="mt-1 rounded-lg bg-[var(--background-secondary)] border border-[var(--border-subtle)] p-3 font-mono text-[11px] text-[var(--foreground-secondary)] overflow-x-auto">npm install</pre>
+            <pre className="mt-1 rounded-lg bg-[var(--background-secondary)] border border-[var(--border-subtle)] p-3 font-mono text-[11px] text-[var(--foreground-secondary)] overflow-x-auto">pnpm install</pre>
           </Step>
           <Step n={2}>
             <p><strong className="text-[var(--foreground)]">Copy the environment template:</strong></p>
@@ -243,7 +243,7 @@ export default function SetupPage() {
           </Step>
           <Step n={3}>
             <p><strong className="text-[var(--foreground)]">Start everything:</strong></p>
-            <pre className="mt-1 rounded-lg bg-[var(--background-secondary)] border border-[var(--border-subtle)] p-3 font-mono text-[11px] text-[var(--foreground-secondary)] overflow-x-auto">npm run dev:all</pre>
+            <pre className="mt-1 rounded-lg bg-[var(--background-secondary)] border border-[var(--border-subtle)] p-3 font-mono text-[11px] text-[var(--foreground-secondary)] overflow-x-auto">pnpm dev:all</pre>
           </Step>
           <Step n={4}>
             <p><strong className="text-[var(--foreground)]">Open the app</strong> at <code className="rounded-md bg-[var(--background-secondary)] px-1.5 py-0.5 text-[11px] font-mono">http://localhost:3000</code> and upload a transcript.</p>
@@ -267,7 +267,16 @@ const ENV_VARS = [
   { name: "JIRA_API_TOKEN", required: true, description: "Jira API token for authentication" },
   { name: "JIRA_DEFAULT_PROJECT", required: false, description: "Default Jira project key (default: SCRUM)" },
   { name: "SLACK_WEBHOOK_URL", required: false, description: "Slack incoming webhook URL for notifications" },
+  { name: "WEBHOOK_SECRET", required: true, description: "Shared secret for transcript webhooks" },
+  { name: "CRON_SECRET", required: false, description: "Bearer token for scheduled maintenance calls" },
+  { name: "REPO_READER_PROVIDER", required: false, description: "Repo reader mode for prompt packs: direct or composio" },
+  { name: "GITHUB_READONLY_TOKEN", required: false, description: "Read-only GitHub token when REPO_READER_PROVIDER=direct" },
+  { name: "COMPOSIO_API_KEY", required: false, description: "Composio API key when REPO_READER_PROVIDER=composio" },
+  { name: "COMPOSIO_GITHUB_CONNECTED_ACCOUNT_ID", required: false, description: "Connected GitHub account ID for Composio repo reads" },
+  { name: "RESEND_API_KEY", required: false, description: "Resend API key for developer prompt pack emails" },
+  { name: "EMAIL_FROM", required: false, description: "Sender address for developer prompt pack emails" },
   { name: "NEXT_PUBLIC_APP_URL", required: false, description: "Public URL of the app (default: http://localhost:3000)" },
+  { name: "VERCEL_REGION", required: false, description: "Queue region for local/non-Vercel execution (default: iad1)" },
   { name: "LOG_LEVEL", required: false, description: "Logging verbosity: debug, info, warn, error" },
   { name: "GOOGLE_CLIENT_ID", required: false, description: "Google OAuth client ID for Meet integration" },
   { name: "GOOGLE_CLIENT_SECRET", required: false, description: "Google OAuth client secret" },

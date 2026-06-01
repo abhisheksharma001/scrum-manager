@@ -24,10 +24,4 @@ if command -v supabase &>/dev/null; then
   ok "Supabase stopped."
 fi
 
-# Clean up .env.local
-if [ -f ".env.local" ]; then
-  rm -f .env.local
-  ok "Removed .env.local"
-fi
-
 ok "All services stopped."

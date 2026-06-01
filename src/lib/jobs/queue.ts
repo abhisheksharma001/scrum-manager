@@ -1,5 +1,5 @@
-import { send } from "@vercel/queue";
 import { logger } from "@/lib/logger";
+import { sendQueueMessage } from "./queue-client";
 
 const log = logger.child({ service: "jobs" });
 
@@ -76,7 +76,7 @@ export interface BriefDeliveryJob {
 export async function enqueueTranscriptProcessing(
   data: TranscriptProcessingJob
 ): Promise<string | null> {
-  const { messageId } = await send(TOPIC_NAMES.TRANSCRIPT_PROCESSING, data);
+  const { messageId } = await sendQueueMessage(TOPIC_NAMES.TRANSCRIPT_PROCESSING, data);
   log.info(
     { messageId, transcriptId: data.transcriptId },
     "Enqueued transcript for processing"
@@ -87,7 +87,7 @@ export async function enqueueTranscriptProcessing(
 export async function enqueueJiraCreation(
   data: JiraCreationJob
 ): Promise<string | null> {
-  const { messageId } = await send(TOPIC_NAMES.JIRA_CREATION, data);
+  const { messageId } = await sendQueueMessage(TOPIC_NAMES.JIRA_CREATION, data);
   log.info(
     { messageId, taskId: data.taskId },
     "Enqueued Jira creation"
@@ -98,7 +98,7 @@ export async function enqueueJiraCreation(
 export async function enqueueRepoAnalysis(
   data: RepoAnalysisJob
 ): Promise<string | null> {
-  const { messageId } = await send(TOPIC_NAMES.REPO_ANALYSIS, data);
+  const { messageId } = await sendQueueMessage(TOPIC_NAMES.REPO_ANALYSIS, data);
   log.info({ messageId, briefId: data.briefId }, "Enqueued repo analysis");
   return messageId;
 }
@@ -106,7 +106,7 @@ export async function enqueueRepoAnalysis(
 export async function enqueueBriefDelivery(
   data: BriefDeliveryJob
 ): Promise<string | null> {
-  const { messageId } = await send(TOPIC_NAMES.BRIEF_DELIVERY, data);
+  const { messageId } = await sendQueueMessage(TOPIC_NAMES.BRIEF_DELIVERY, data);
   log.info({ messageId, briefId: data.briefId }, "Enqueued brief delivery");
   return messageId;
 }

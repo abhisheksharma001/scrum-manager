@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 const CORS_ORIGINS =
   process.env.ALLOWED_ORIGINS?.split(",").filter(Boolean) ?? [];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   if (request.method === "OPTIONS") {
     return handleCors(request, new NextResponse(null, { status: 204 }));
   }

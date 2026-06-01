@@ -1,11 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockSend } = vi.hoisted(() => ({
-  mockSend: vi.fn().mockResolvedValue({ messageId: "msg-1" }),
-}));
+const { MockQueueClient, mockSend } = vi.hoisted(() => {
+  const mockSend = vi.fn().mockResolvedValue({ messageId: "msg-1" });
+  const mockHandleCallback = vi.fn((handler) => handler);
+  const MockQueueClient = vi.fn(function QueueClientMock() {
+    return {
+      send: mockSend,
+      handleCallback: mockHandleCallback,
+    };
+  });
+  return { MockQueueClient, mockSend };
+});
 
 vi.mock("@vercel/queue", () => ({
-  send: mockSend,
+  QueueClient: MockQueueClient,
 }));
 
 import { getRedisConnection, enqueueTranscriptProcessing, enqueueJiraCreation } from "../queue";
