@@ -206,11 +206,29 @@ pnpm dev:all
 
 # Or just the Next.js dev server
 pnpm dev
+
+# Run the mocked end-to-end pipeline smoke test
+pnpm test:pipeline
 ```
 
 Copy `.env.example` to `.env` and fill in your keys. At minimum you need Supabase credentials and an Anthropic API key. Add Jira credentials to enable ticket creation, Slack webhook URL for notifications.
 
 See the in-app **Setup** page for guided configuration of each integration.
+
+### Local Supabase Ports
+
+The checked-in local Supabase config uses the `553xx` port range to avoid collisions with other Supabase projects:
+
+| Service | Local URL / port |
+|---|---|
+| API | `http://127.0.0.1:55321` |
+| Database | `postgresql://postgres:postgres@127.0.0.1:55322/postgres` |
+| Studio | `http://127.0.0.1:55323` |
+| Inbucket | `http://127.0.0.1:55324` |
+| Analytics | `55327` |
+| Pooler | `55329` |
+
+If you already have a Supabase stack running on the default `543xx` ports, this project can run alongside it without changing Docker containers by hand.
 
 ---
 
