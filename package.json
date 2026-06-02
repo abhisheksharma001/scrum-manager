@@ -12,6 +12,8 @@
     "stop": "./scripts/stop.sh",
     "test": "vitest run",
     "test:pipeline": "vitest run test/pipeline-smoke.test.ts",
+    "test:ai-pipeline": "tsx scripts/ai-pipeline-smoke.ts",
+    "test:groq-pipeline": "tsx scripts/groq-pipeline-smoke.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "prepare": "husky"

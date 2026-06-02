@@ -159,14 +159,34 @@ export default function SetupPage() {
         </div>
       </SectionCard>
 
-      <SectionCard id="anthropic" title="Anthropic (Claude AI)" status={s("anthropic")}>
-        <p className="text-[13px] text-[var(--foreground-secondary)]">Claude extracts action items and powers the AI interviewer.</p>
+      <SectionCard id="ai-provider" title="AI Provider" status={s("ai-provider")}>
+        <p className="text-[13px] text-[var(--foreground-secondary)]">
+          The production app pipeline currently uses Claude for extraction, interviews, requirements, routing, and developer prompt packs.
+        </p>
         <div className="flex flex-col gap-4">
           <Step n={1}><p><strong className="text-[var(--foreground)]">Create an account</strong> at <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">console.anthropic.com</a>.</p></Step>
           <Step n={2}><p><strong className="text-[var(--foreground)]">Generate an API key</strong> from the <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">API Keys page</a>.</p></Step>
         </div>
         <div className="flex flex-col gap-1.5">
           <EnvVar name="ANTHROPIC_API_KEY" placeholder="sk-ant-api03-..." />
+        </div>
+      </SectionCard>
+
+      <SectionCard id="ai-smoke" title="AI Smoke Harness" status={s("ai-smoke")}>
+        <p className="text-[13px] text-[var(--foreground-secondary)]">
+          The standalone transcript-to-ticket smoke test can run with Claude, Groq, or Kimi. This is useful when a team wants to validate the raw standup-to-ticket behavior before wiring Jira or email.
+        </p>
+        <div className="flex flex-col gap-4">
+          <Step n={1}><p><strong className="text-[var(--foreground)]">Choose a smoke provider</strong> with <code className="rounded-md bg-[var(--background-secondary)] px-1.5 py-0.5 text-[11px] font-mono">AI_SMOKE_PROVIDER=claude</code>, <code className="rounded-md bg-[var(--background-secondary)] px-1.5 py-0.5 text-[11px] font-mono">groq</code>, or <code className="rounded-md bg-[var(--background-secondary)] px-1.5 py-0.5 text-[11px] font-mono">kimi</code>.</p></Step>
+          <Step n={2}><p><strong className="text-[var(--foreground)]">Provide one matching key.</strong> If no provider is set, the script uses the first available key in this order: Claude, Groq, Kimi.</p></Step>
+          <Step n={3}><p><strong className="text-[var(--foreground)]">Run the smoke test:</strong></p><pre className="mt-1 rounded-lg bg-[var(--background-secondary)] border border-[var(--border-subtle)] p-3 font-mono text-[11px] text-[var(--foreground-secondary)] overflow-x-auto">pnpm test:ai-pipeline</pre></Step>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <EnvVar name="AI_SMOKE_PROVIDER" placeholder="claude" />
+          <EnvVar name="ANTHROPIC_API_KEY" placeholder="sk-ant-api03-..." />
+          <EnvVar name="GROQ_API_KEY" placeholder="gsk_..." />
+          <EnvVar name="KIMI_API_KEY" placeholder="sk-..." />
+          <EnvVar name="KIMI_BASE_URL" placeholder="https://api.moonshot.ai/v1" />
         </div>
       </SectionCard>
 
@@ -261,7 +281,11 @@ const ENV_VARS = [
   { name: "NEXT_PUBLIC_SUPABASE_ANON_KEY", required: true, description: "Supabase anonymous key for client-side auth" },
   { name: "REDIS_HOST", required: false, description: "Redis host for rate limiting (default: localhost). Optional — falls back gracefully." },
   { name: "REDIS_PORT", required: false, description: "Redis port (default: 6379)" },
-  { name: "ANTHROPIC_API_KEY", required: true, description: "Anthropic API key for Claude-powered task extraction" },
+  { name: "ANTHROPIC_API_KEY", required: true, description: "Anthropic API key for the production Claude-powered pipeline" },
+  { name: "AI_SMOKE_PROVIDER", required: false, description: "Smoke harness provider: claude, groq, or kimi" },
+  { name: "GROQ_API_KEY", required: false, description: "Groq API key for the standalone AI pipeline smoke harness" },
+  { name: "KIMI_API_KEY", required: false, description: "Kimi/Moonshot API key for the standalone AI pipeline smoke harness" },
+  { name: "KIMI_BASE_URL", required: false, description: "Kimi OpenAI-compatible base URL (default: https://api.moonshot.ai/v1)" },
   { name: "JIRA_BASE_URL", required: true, description: "Your Atlassian instance URL" },
   { name: "JIRA_EMAIL", required: true, description: "Email of the Jira account that owns the API token" },
   { name: "JIRA_API_TOKEN", required: true, description: "Jira API token for authentication" },

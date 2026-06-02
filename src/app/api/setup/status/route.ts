@@ -24,9 +24,18 @@ export async function GET(request: NextRequest) {
             process.env.JIRA_API_TOKEN
         ),
       },
-      anthropic: {
-        label: "Claude AI",
+      "ai-provider": {
+        label: "AI Provider",
         configured: Boolean(process.env.ANTHROPIC_API_KEY),
+      },
+      "ai-smoke": {
+        label: "AI Smoke",
+        configured: Boolean(
+          process.env.ANTHROPIC_API_KEY ||
+            process.env.GROQ_API_KEY ||
+            process.env.KIMI_API_KEY ||
+            process.env.MOONSHOT_API_KEY
+        ),
       },
       slack: {
         label: "Slack",
