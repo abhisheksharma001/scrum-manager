@@ -6,6 +6,7 @@ import { apiError } from "@/lib/errors";
 import { parseBody } from "@/lib/validation";
 import { interviewCompleteBody } from "@/lib/validation";
 import { notifyInterviewCompleted } from "@/lib/services/notifications";
+import { learningStore } from "@/lib/learning/store";
 
 export async function POST(
   request: NextRequest,
@@ -26,6 +27,16 @@ export async function POST(
       priority,
       labels,
     });
+
+    await learningStore.recordFeedback({
+      ownerUserId: user.id,
+      taskId: task.id,
+      eventType: "correction",
+      scope: "just_this_ticket",
+      note: "PM completed interview review.",
+      corrections: { assignee, priority, labels },
+      confidence: "medium",
+    }).catch(() => null);
 
     await enqueueJiraCreation({ taskId: task.id });
 

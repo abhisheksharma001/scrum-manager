@@ -15,7 +15,7 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth(request);
+    const user = await requireAuth(request);
     await rateLimit(`upload:${getClientIp(request)}`, { windowMs: 60_000, max: 5 });
 
     const contentLength = request.headers.get("content-length");
@@ -60,7 +60,9 @@ export async function POST(request: NextRequest) {
       attendees,
     });
 
-    const { id: transcriptId, isDuplicate } = await ingestTranscript(transcript);
+    const { id: transcriptId, isDuplicate } = await ingestTranscript(transcript, {
+      ownerUserId: user.id,
+    });
 
     if (isDuplicate) {
       return NextResponse.json(

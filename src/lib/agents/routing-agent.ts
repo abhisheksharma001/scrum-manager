@@ -2,6 +2,7 @@ import { generateText, Output } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { supabaseAdmin } from "@/lib/supabase";
 import { logger } from "@/lib/logger";
+import { previewLearningRouting } from "@/lib/learning/routing";
 import { routingOutputSchema } from "./schemas";
 import type { ExtractedTaskRow } from "@/lib/types";
 
@@ -35,6 +36,7 @@ export async function routeTaskToProject(
 ): Promise<string> {
   if (task.tracker_project) {
     log.debug({ taskId: task.id, project: task.tracker_project }, "Using cached routing decision");
+    await previewLearningRouting(task, { persist: true, fallbackProjectKey: task.tracker_project }).catch(() => null);
     return task.tracker_project;
   }
 
@@ -42,12 +44,18 @@ export async function routeTaskToProject(
   const envDefault = process.env.JIRA_DEFAULT_PROJECT || "SCRUM";
 
   if (routes.length === 0) {
+    await previewLearningRouting(task, { persist: true, fallbackProjectKey: envDefault }).catch(() => null);
     await persistRouting(task.id, envDefault);
     return envDefault;
   }
 
   if (routes.length === 1) {
     const key = routes[0].projectKey;
+    const learned = await previewLearningRouting(task, { persist: true, fallbackProjectKey: key }).catch(() => null);
+    if (learned?.projectKey && !learned.needsReview) {
+      await persistRouting(task.id, learned.projectKey);
+      return learned.projectKey;
+    }
     await persistRouting(task.id, key);
     return key;
   }
@@ -55,7 +63,14 @@ export async function routeTaskToProject(
   const defaultRoute = routes.find((r) => r.isDefault);
   const fallback = defaultRoute?.projectKey ?? routes[0].projectKey;
 
+  const learned = await previewLearningRouting(task, { persist: true, fallbackProjectKey: fallback }).catch(() => null);
+  if (learned?.projectKey && !learned.needsReview && ["memory", "project_mapping", "repo_catalog"].includes(learned.source)) {
+    await persistRouting(task.id, learned.projectKey);
+    return learned.projectKey;
+  }
+
   const projectKey = await callRoutingAgent(task, routes, fallback);
+  await previewLearningRouting(task, { persist: true, fallbackProjectKey: projectKey }).catch(() => null);
   await persistRouting(task.id, projectKey);
   return projectKey;
 }

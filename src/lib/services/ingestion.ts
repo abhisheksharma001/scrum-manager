@@ -10,7 +10,8 @@ const log = logger.child({ service: "ingestion" });
  * Returns the transcript row ID, or null if it was a duplicate.
  */
 export async function ingestTranscript(
-  transcript: NormalizedTranscript
+  transcript: NormalizedTranscript,
+  options: { ownerUserId?: string | null } = {}
 ): Promise<{ id: string; isDuplicate: boolean }> {
   // Check for existing transcript
   const { data: existing } = await supabaseAdmin
@@ -50,6 +51,7 @@ export async function ingestTranscript(
       utterance_count: transcript.utterances.length,
       full_text: fullText,
       status: "pending",
+      owner_user_id: options.ownerUserId ?? null,
     })
     .select("id")
     .single();

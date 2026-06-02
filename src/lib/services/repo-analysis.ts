@@ -2,7 +2,7 @@ import { generateSearchPlan } from "@/lib/agents/search-planner-agent";
 import { generateRepoBrief } from "@/lib/agents/repo-brief-agent";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getRepoReader } from "./github-reader";
-import { resolveReposForProject } from "./repo-resolver";
+import { resolveReposForTask } from "./repo-resolver";
 import { getBrief, getBriefConfig, setBriefStatus } from "./developer-brief";
 import type { DeveloperBriefOutput } from "@/lib/agents/schemas";
 
@@ -49,7 +49,7 @@ export async function analyzeBrief(briefId: string) {
       .single();
     if (!task) throw new Error("Task not found for brief");
 
-    const repos = await resolveReposForProject(task.tracker_project);
+    const repos = await resolveReposForTask(task);
     if (repos.length === 0) {
       await setBriefStatus(briefId, "needs_human_direction", {
         error_code: "no_repo_configured",

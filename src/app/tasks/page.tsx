@@ -20,9 +20,9 @@ interface Task {
   status: string;
   interview_responses: Record<string, string> | null;
   source_quotes: { text: string; timestamp: number }[];
-  jira_project: string | null;
-  jira_issue_key: string | null;
-  jira_error: string | null;
+  tracker_project: string | null;
+  tracker_issue_key: string | null;
+  tracker_error: string | null;
   created_at: string;
   updated_at: string;
   transcript?: TaskTranscript;
@@ -101,7 +101,7 @@ export default function TasksPage() {
           autoRes.json(),
         ]);
         const all = [...(completedData.tasks || []), ...(autoData.tasks || [])];
-        setTasks(all.filter((t: Task) => t.jira_issue_key));
+        setTasks(all.filter((t: Task) => t.tracker_issue_key));
         setLoading(false);
         return;
       } else if (activeTab === "failed") {
@@ -115,7 +115,7 @@ export default function TasksPage() {
       let filtered = data.tasks || [];
 
       if (activeTab === "completed" || activeTab === "auto_created") {
-        filtered = filtered.filter((t: Task) => !t.jira_issue_key);
+        filtered = filtered.filter((t: Task) => !t.tracker_issue_key);
       }
 
       setTasks(filtered);
@@ -179,7 +179,7 @@ export default function TasksPage() {
   };
 
   const pushAll = async () => {
-    const unpushed = tasks.filter((t) => !t.jira_issue_key);
+    const unpushed = tasks.filter((t) => !t.tracker_issue_key);
     for (const task of unpushed) {
       await pushToJira(task.id);
     }
@@ -299,9 +299,9 @@ function TaskCard({
             </h3>
             <PriorityBadge priority={task.priority} />
             <ConfidenceBadge confidence={task.confidence} />
-            {task.jira_project && (
+            {task.tracker_project && (
               <span className="inline-flex px-1.5 py-0.5 text-[10px] font-mono font-medium rounded bg-[var(--purple-muted)] text-[var(--purple)]">
-                {task.jira_project}
+                {task.tracker_project}
               </span>
             )}
             {task.labels?.map((label) => (
@@ -333,18 +333,18 @@ function TaskCard({
 
         {/* Actions */}
         <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-          {task.jira_issue_key ? (
+          {task.tracker_issue_key ? (
             <a
-              href={trackerBaseUrl ? `${trackerBaseUrl}/browse/${task.jira_issue_key}` : "#"}
+              href={trackerBaseUrl ? `${trackerBaseUrl}/browse/${task.tracker_issue_key}` : "#"}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-md bg-[var(--success-muted)] text-[var(--success)] hover:bg-[var(--success)] hover:text-[var(--foreground-inverted)] transition-all"
-              title={trackerBaseUrl ? `Open ${task.jira_issue_key}` : task.jira_issue_key}
+              title={trackerBaseUrl ? `Open ${task.tracker_issue_key}` : task.tracker_issue_key}
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
-              {task.jira_issue_key}
+              {task.tracker_issue_key}
               <svg className="w-2.5 h-2.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
               </svg>
@@ -381,9 +381,9 @@ function TaskCard({
             </button>
           )}
 
-          {(task.jira_error || pushResult?.ok === false) && (
-            <span className="text-[10px] text-[var(--danger)] max-w-[160px] truncate" title={task.jira_error || pushResult?.message}>
-              {task.jira_error || pushResult?.message}
+          {(task.tracker_error || pushResult?.ok === false) && (
+            <span className="text-[10px] text-[var(--danger)] max-w-[160px] truncate" title={task.tracker_error || pushResult?.message}>
+              {task.tracker_error || pushResult?.message}
             </span>
           )}
 
@@ -453,16 +453,124 @@ function TaskCard({
             </div>
           )}
 
+          <TeachSystemPanel task={task} />
+
           {/* Metadata */}
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] font-mono text-[var(--foreground-tertiary)] pt-3 border-t border-[var(--border-subtle)]">
             <span>{task.id.slice(0, 8)}</span>
             <span>{task.status}</span>
-            {task.jira_project && <span>{task.jira_project}</span>}
+            {task.tracker_project && <span>{task.tracker_project}</span>}
             <span>{new Date(task.created_at).toLocaleString()}</span>
             {task.transcript && <span>{task.transcript.provider}</span>}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function TeachSystemPanel({ task }: { task: Task }) {
+  const [projectKey, setProjectKey] = useState(task.tracker_project || "");
+  const [repoNames, setRepoNames] = useState("");
+  const [paths, setPaths] = useState("");
+  const [assignee, setAssignee] = useState(task.inferred_assignees?.[0]?.name || "");
+  const [note, setNote] = useState("");
+  const [teachSystem, setTeachSystem] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [decision, setDecision] = useState<{ explanation?: string; confidence?: number; needsReview?: boolean; repoMatches?: Array<{ repo: string; score?: number }> } | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/routing/preview?taskId=${task.id}`)
+      .then((res) => res.json())
+      .then((data) => setDecision(data.decision || null))
+      .catch(() => {});
+  }, [task.id]);
+
+  const submit = async () => {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const corrections = {
+        projectKey: projectKey.trim() || undefined,
+        repoNames: repoNames.split(",").map((item) => item.trim()).filter(Boolean),
+        paths: paths.split(",").map((item) => item.trim()).filter(Boolean),
+        assignee: assignee.trim() || undefined,
+      };
+      const res = await fetch("/api/learning/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          taskId: task.id,
+          eventType: corrections.repoNames.length > 0 ? "repo_override" : "correction",
+          scope: teachSystem ? "teach_system" : "just_this_ticket",
+          note,
+          corrections,
+          confidence: teachSystem ? "high" : "medium",
+        }),
+      });
+      if (!res.ok) throw new Error("Could not save feedback");
+      setMessage("Saved. Future routing can use this correction.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--background-secondary)] p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h4 className="text-[10px] font-semibold uppercase tracking-wider text-[var(--foreground-tertiary)]">
+            Teach Routing
+          </h4>
+          {decision?.explanation && (
+            <p className="mt-1 text-[12px] text-[var(--foreground-secondary)]">
+              {decision.explanation} Confidence: {Math.round((decision.confidence ?? 0) * 100)}%
+              {decision.needsReview ? " · needs PM review" : ""}
+            </p>
+          )}
+        </div>
+        <label className="flex items-center gap-2 text-[11px] text-[var(--foreground-secondary)]">
+          <input type="checkbox" checked={teachSystem} onChange={(e) => setTeachSystem(e.target.checked)} />
+          Teach next time
+        </label>
+      </div>
+
+      {decision?.repoMatches && decision.repoMatches.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {decision.repoMatches.slice(0, 3).map((repo) => (
+            <span key={repo.repo} className="rounded bg-[var(--surface-active)] px-2 py-0.5 text-[10px] font-mono text-[var(--foreground-secondary)]">
+              {repo.repo}{typeof repo.score === "number" ? ` ${Math.round(repo.score * 100)}%` : ""}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
+        <input value={projectKey} onChange={(e) => setProjectKey(e.target.value.toUpperCase())} placeholder="Project key" className="font-mono" />
+        <input value={assignee} onChange={(e) => setAssignee(e.target.value)} placeholder="Assignee" />
+        <input value={repoNames} onChange={(e) => setRepoNames(e.target.value)} placeholder="repo-a, repo-b" className="font-mono" />
+        <input value={paths} onChange={(e) => setPaths(e.target.value)} placeholder="src/api, workers/billing" className="font-mono" />
+      </div>
+      <textarea
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="When the team says this, what should the system remember?"
+        rows={2}
+        className="mt-2 w-full resize-y rounded-lg"
+      />
+      <div className="mt-2 flex items-center gap-3">
+        <button
+          onClick={submit}
+          disabled={saving}
+          className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[var(--accent-hover)] disabled:opacity-40"
+        >
+          {saving ? "Saving..." : "Save Feedback"}
+        </button>
+        {message && <span className="text-[11px] text-[var(--foreground-tertiary)]">{message}</span>}
+      </div>
     </div>
   );
 }

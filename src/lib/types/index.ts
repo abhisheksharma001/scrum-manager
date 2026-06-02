@@ -58,6 +58,7 @@ export type BriefConfidence = "high" | "medium" | "low" | "none";
 
 export interface ProjectRepoMapping {
   id: string;
+  owner_user_id?: string | null;
   project_key: string;
   repo_full_name: string;
   is_primary: boolean;
@@ -151,6 +152,7 @@ export interface ExtractedTask {
 
 export interface TranscriptRow {
   id: string;
+  owner_user_id?: string | null;
   provider: TranscriptProvider;
   external_id: string;
   meeting_title: string;
@@ -167,6 +169,7 @@ export interface TranscriptRow {
 
 export interface ExtractedTaskRow {
   id: string;
+  owner_user_id?: string | null;
   transcript_id: string;
   extracted_title: string;
   extracted_description: string;
@@ -190,6 +193,96 @@ export interface ExtractedTaskRow {
   updated_at: string;
   // Joined fields (optional, from queries)
   transcript?: TranscriptRow;
+}
+
+export type LearningFeedbackType =
+  | "correction"
+  | "approval"
+  | "rejection"
+  | "comment"
+  | "repo_override"
+  | "assignee_fix";
+
+export type LearningScope = "just_this_ticket" | "teach_system";
+export type LearningMemoryStatus = "active" | "pending" | "inactive";
+export type LearningMemoryType =
+  | "project_route"
+  | "repo_route"
+  | "path_route"
+  | "assignee_preference"
+  | "team_note";
+
+export interface LearningCorrections {
+  title?: string;
+  description?: string;
+  projectKey?: string;
+  repoNames?: string[];
+  paths?: string[];
+  assignee?: string;
+  priority?: Priority;
+  labels?: string[];
+}
+
+export interface LearningFeedbackEventRow {
+  id: string;
+  owner_user_id: string;
+  task_id: string | null;
+  brief_id: string | null;
+  event_type: LearningFeedbackType;
+  scope: LearningScope;
+  note: string | null;
+  corrections: LearningCorrections;
+  previous_values: Record<string, unknown>;
+  confidence: Confidence;
+  created_at: string;
+}
+
+export interface LearningMemoryRow {
+  id: string;
+  owner_user_id: string;
+  source_feedback_event_id: string | null;
+  status: LearningMemoryStatus;
+  memory_type: LearningMemoryType;
+  pattern: string;
+  target: Record<string, unknown>;
+  confidence: number;
+  evidence_count: number;
+  last_used_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RepoCatalogEntryRow {
+  id: string;
+  owner_user_id: string;
+  repo_name: string;
+  local_path: string;
+  project_key: string | null;
+  description: string | null;
+  readme_title: string | null;
+  package_metadata: Record<string, unknown>;
+  important_paths: string[];
+  file_tree: string[];
+  search_text: string;
+  indexed_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RoutingDecisionRow {
+  id: string;
+  owner_user_id: string;
+  task_id: string;
+  project_key: string | null;
+  repo_matches: Array<{ repo: string; localPath?: string; score?: number; reason?: string }>;
+  assignee: string | null;
+  path_matches: Array<{ path: string; score?: number; reason?: string }>;
+  confidence: number;
+  source: "correction" | "memory" | "project_mapping" | "repo_catalog" | "ai_router" | "fallback" | "pm_review";
+  explanation: string;
+  alternatives: Array<Record<string, unknown>>;
+  needs_review: boolean;
+  created_at: string;
 }
 
 export interface TaskStatusHistoryRow {

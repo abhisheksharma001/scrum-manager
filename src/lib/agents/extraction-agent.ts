@@ -144,6 +144,7 @@ export async function storeAndRouteExtractedTasks(
   autoCreateThreshold: string[] = ["high"]
 ): Promise<string[]> {
   const taskIds: string[] = [];
+  const transcriptOwner = await fetchTranscriptOwner(result.transcriptId);
 
   for (const task of result.tasks) {
     const status = autoCreateThreshold.includes(task.confidence)
@@ -163,6 +164,7 @@ export async function storeAndRouteExtractedTasks(
         priority: task.priority,
         labels: task.labels,
         suggested_interviewer: task.suggestedInterviewer ?? null,
+        owner_user_id: transcriptOwner,
         status,
       })
       .select("id")
@@ -186,4 +188,23 @@ export async function storeAndRouteExtractedTasks(
   }
 
   return taskIds;
+}
+
+async function fetchTranscriptOwner(transcriptId: string): Promise<string | null> {
+  try {
+    const table = supabaseAdmin.from("transcripts") as unknown as {
+      select?: (columns: string) => {
+        eq: (column: string, value: string) => {
+          maybeSingle?: () => Promise<{ data?: { owner_user_id?: string | null } | null }>;
+        };
+      };
+    };
+    if (typeof table.select !== "function") return null;
+    const query = table.select("owner_user_id").eq("id", transcriptId);
+    if (typeof query.maybeSingle !== "function") return null;
+    const { data } = await query.maybeSingle();
+    return data?.owner_user_id ?? null;
+  } catch {
+    return null;
+  }
 }

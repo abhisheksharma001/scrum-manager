@@ -47,6 +47,18 @@ export default function SettingsPage() {
           <ScrumReliefSettings />
         </div>
       </div>
+
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
+        <div className="border-b border-[var(--border)] px-5 py-4">
+          <h2 className="text-[15px] font-semibold">Local Learning</h2>
+          <p className="text-[12px] text-[var(--foreground-tertiary)] mt-0.5">
+            Index local repos and manage PM-taught routing memories
+          </p>
+        </div>
+        <div className="px-5 py-5">
+          <LocalLearningSettings />
+        </div>
+      </div>
     </div>
   );
 }
@@ -206,10 +218,170 @@ function ConfidenceThresholdControl() {
 // ─── Scrum Relief Settings ────────────────────────────────────────────────
 
 interface ProjectRepo {
+  owner_user_id?: string | null;
   project_key: string;
   repo_full_name: string;
   is_primary?: boolean;
   paths_hint?: string | null;
+}
+
+// ─── Local Learning Settings ──────────────────────────────────────────────
+
+interface RepoCatalogEntry {
+  id: string;
+  repo_name: string;
+  local_path: string;
+  project_key: string | null;
+  description: string | null;
+  important_paths: string[];
+  indexed_at: string;
+}
+
+interface LearningMemory {
+  id: string;
+  status: "active" | "pending" | "inactive";
+  memory_type: string;
+  pattern: string;
+  target: Record<string, unknown>;
+  confidence: number;
+  evidence_count: number;
+}
+
+function LocalLearningSettings() {
+  const [localPath, setLocalPath] = useState("");
+  const [projectKey, setProjectKey] = useState("");
+  const [repoName, setRepoName] = useState("");
+  const [repos, setRepos] = useState<RepoCatalogEntry[]>([]);
+  const [memories, setMemories] = useState<LearningMemory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [indexing, setIndexing] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const load = async () => {
+    const [repoRes, memoryRes] = await Promise.all([
+      fetch("/api/repo-catalog/index"),
+      fetch("/api/learning/memories"),
+    ]);
+    const [repoData, memoryData] = await Promise.all([repoRes.json(), memoryRes.json()]);
+    setRepos(repoData.repos || []);
+    setMemories(memoryData.memories || []);
+  };
+
+  useEffect(() => {
+    load().catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const indexRepo = async () => {
+    setIndexing(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/repo-catalog/index", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          localPath,
+          projectKey: projectKey.trim() || null,
+          repoName: repoName.trim() || null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not index repo");
+      setLocalPath("");
+      setRepoName("");
+      setMessage("Repo indexed.");
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Indexing failed");
+    } finally {
+      setIndexing(false);
+    }
+  };
+
+  const updateMemory = async (id: string, status: LearningMemory["status"]) => {
+    await fetch(`/api/learning/memories/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    await load();
+  };
+
+  if (loading) return <div className="h-40 skeleton rounded-lg" />;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3">
+        <div className="grid gap-2 md:grid-cols-[1fr_100px_160px_auto]">
+          <input value={localPath} onChange={(e) => setLocalPath(e.target.value)} placeholder="/Users/name/projects/shiro" className="font-mono" />
+          <input value={projectKey} onChange={(e) => setProjectKey(e.target.value.toUpperCase())} placeholder="ENG" className="font-mono" />
+          <input value={repoName} onChange={(e) => setRepoName(e.target.value)} placeholder="Display name" />
+          <button
+            onClick={indexRepo}
+            disabled={indexing || !localPath.trim()}
+            className="rounded-lg bg-[var(--accent)] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[var(--accent-hover)] disabled:opacity-40"
+          >
+            {indexing ? "Indexing..." : "Index Repo"}
+          </button>
+        </div>
+        {message && <p className="text-[11px] text-[var(--foreground-tertiary)]">{message}</p>}
+
+        <div className="flex flex-col gap-2">
+          {repos.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-[var(--border)] p-4 text-[12px] text-[var(--foreground-tertiary)]">
+              No local repos indexed yet.
+            </p>
+          ) : repos.map((repo) => (
+            <div key={repo.id} className="rounded-lg border border-[var(--border)] bg-[var(--background-secondary)] p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[13px] font-semibold">{repo.repo_name}</p>
+                  <p className="mt-0.5 text-[11px] font-mono text-[var(--foreground-tertiary)]">{repo.local_path}</p>
+                </div>
+                {repo.project_key && <span className="rounded bg-[var(--accent-muted)] px-2 py-0.5 text-[10px] font-mono text-[var(--accent)]">{repo.project_key}</span>}
+              </div>
+              {repo.description && <p className="mt-2 text-[12px] text-[var(--foreground-secondary)] line-clamp-2">{repo.description}</p>}
+              <p className="mt-2 text-[10px] text-[var(--foreground-tertiary)]">
+                {repo.important_paths?.length ?? 0} important paths · indexed {new Date(repo.indexed_at).toLocaleString()}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="border-t border-[var(--border-subtle)] pt-5">
+        <h3 className="text-[13px] font-semibold">Memories</h3>
+        <div className="mt-3 flex flex-col gap-2">
+          {memories.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-[var(--border)] p-4 text-[12px] text-[var(--foreground-tertiary)]">
+              No PM teaching memories yet.
+            </p>
+          ) : memories.map((memory) => (
+            <div key={memory.id} className="rounded-lg border border-[var(--border)] bg-[var(--background-secondary)] p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-semibold uppercase text-[var(--foreground-tertiary)]">{memory.memory_type.replaceAll("_", " ")}</span>
+                    <span className="rounded bg-[var(--surface-active)] px-2 py-0.5 text-[10px]">{memory.status}</span>
+                    <span className="text-[10px] text-[var(--foreground-tertiary)]">{Math.round(memory.confidence * 100)}%</span>
+                  </div>
+                  <p className="mt-1 text-[13px] text-[var(--foreground-secondary)]">{memory.pattern}</p>
+                  <p className="mt-1 text-[10px] font-mono text-[var(--foreground-tertiary)]">{JSON.stringify(memory.target)}</p>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  {memory.status !== "active" && (
+                    <button onClick={() => updateMemory(memory.id, "active")} className="rounded border border-[var(--border)] px-2 py-1 text-[10px]">Activate</button>
+                  )}
+                  {memory.status !== "inactive" && (
+                    <button onClick={() => updateMemory(memory.id, "inactive")} className="rounded border border-[var(--border)] px-2 py-1 text-[10px]">Disable</button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ScrumReliefSettings() {
