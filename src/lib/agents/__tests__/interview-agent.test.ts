@@ -101,11 +101,12 @@ describe("applyInterviewCompletion", () => {
     expect(updateCall.dismissed_reason).toBe("Already handled in another ticket");
   });
 
-  it("sets task to completed when should_create is true", async () => {
+  it("sets task to pending_repo_analysis when should_create is true for code work", async () => {
     const completion: InterviewCompletion = {
       title: "Refined title",
       description: "Refined description",
       assignee: "Jordan",
+      workType: "code",
       priority: "P1",
       labels: ["frontend"],
       should_create: true,
@@ -114,7 +115,7 @@ describe("applyInterviewCompletion", () => {
     await applyInterviewCompletion("task-4", completion, []);
 
     const updateCall = mockUpdate.mock.calls[0][0];
-    expect(updateCall.status).toBe("completed");
+    expect(updateCall.status).toBe("pending_repo_analysis");
     expect(updateCall.extracted_title).toBe("Refined title");
     expect(updateCall.extracted_description).toBe("Refined description");
     expect(updateCall.priority).toBe("P1");
@@ -134,7 +135,7 @@ describe("applyInterviewCompletion", () => {
     await applyInterviewCompletion("task-5", completion, []);
 
     const updateCall = mockUpdate.mock.calls[0][0];
-    expect(updateCall.inferred_assignees).toEqual([{ name: "Alex" }]);
+    expect(updateCall.inferred_assignees).toEqual([{ name: "Alex", email: undefined }]);
   });
 
   it("leaves inferred_assignees undefined when no assignee", async () => {

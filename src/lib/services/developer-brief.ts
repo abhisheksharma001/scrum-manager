@@ -9,10 +9,21 @@ export type BriefErrorCode =
   | "delivery_failed";
 
 export async function createBrief(taskId: string, trackerIssueKey?: string | null) {
+  const { data: task } = await supabaseAdmin
+    .from("extracted_tasks")
+    .select("owner_user_id")
+    .eq("id", taskId)
+    .maybeSingle();
+
   const { data, error } = await supabaseAdmin
     .from("developer_briefs")
     .upsert(
-      { task_id: taskId, tracker_issue_key: trackerIssueKey ?? null, status: "queued" },
+      {
+        task_id: taskId,
+        tracker_issue_key: trackerIssueKey ?? null,
+        owner_user_id: task?.owner_user_id ?? null,
+        status: "queued",
+      },
       { onConflict: "task_id" }
     )
     .select("*")

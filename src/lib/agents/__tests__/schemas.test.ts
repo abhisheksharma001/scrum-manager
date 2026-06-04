@@ -15,6 +15,8 @@ const validTask = {
   description: "Implement the AppFolio webhook handler with retry logic",
   inferredAssignees: [{ name: "Alex", email: "alex@example.com" }],
   confidence: "high" as const,
+  workType: "code" as const,
+  repoContextNeeded: true,
   missingContext: ["What's the deadline?"],
   sourceQuotes: [{ speaker: "Alex", text: "Alex said he'd ship it by Friday", timestamp: 65 }],
   priority: "P1" as const,

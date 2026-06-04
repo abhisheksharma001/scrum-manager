@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ValidationError } from "./errors";
 
 export const prioritySchema = z.enum(["P0", "P1", "P2", "P3"]);
+export const workTypeSchema = z.enum(["code", "non_code", "unclear"]);
 
 // ─── Route Input Schemas ─────────────────────────────────────────────────────
 
@@ -16,6 +17,11 @@ export const interviewSaveBody = z.object({
 export const interviewCompleteBody = z.object({
   responses: z.record(z.string(), z.string()),
   assignee: z.string().optional(),
+  developerName: z.string().optional(),
+  developerEmail: z.string().email().optional(),
+  projectKey: z.string().min(1).max(20).optional(),
+  repoNames: z.array(z.string().min(1)).optional(),
+  workType: workTypeSchema.optional(),
   priority: prioritySchema.optional(),
   labels: z.array(z.string()).optional(),
 });

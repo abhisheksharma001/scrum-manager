@@ -184,7 +184,7 @@ async function getConfigValue<T>(key: string, fallback: T): Promise<T> {
 async function getPreviousTaskValues(taskId: string): Promise<Record<string, unknown>> {
   const { data } = await supabaseAdmin
     .from("extracted_tasks")
-    .select("extracted_title, extracted_description, inferred_assignees, priority, labels, tracker_project")
+    .select("extracted_title, extracted_description, inferred_assignees, priority, labels, tracker_project, assigned_developer_name, assigned_developer_email, work_type")
     .eq("id", taskId)
     .maybeSingle();
   return data ?? {};
@@ -200,7 +200,9 @@ async function applyTaskCorrections(
   if (corrections.title) updates.extracted_title = corrections.title;
   if (corrections.description) updates.extracted_description = corrections.description;
   if (corrections.projectKey) updates.tracker_project = corrections.projectKey.toUpperCase();
-  if (corrections.assignee) updates.inferred_assignees = [{ name: corrections.assignee }];
+  if (corrections.assignee) updates.inferred_assignees = [{ name: corrections.assignee, email: corrections.developerEmail }];
+  if (corrections.developerName) updates.assigned_developer_name = corrections.developerName;
+  if (corrections.developerEmail) updates.assigned_developer_email = corrections.developerEmail;
   if (corrections.priority) updates.priority = corrections.priority;
   if (corrections.labels) updates.labels = corrections.labels;
 
@@ -252,7 +254,18 @@ async function maybeCreateMemory(event: LearningFeedbackEventRow): Promise<void>
     memories.push({
       memory_type: "assignee_preference",
       pattern: note || corrections.title || corrections.description || `Assign similar work to ${corrections.assignee}`,
-      target: { assignee: corrections.assignee },
+      target: {
+        assignee: corrections.assignee,
+        developerName: corrections.developerName ?? corrections.assignee,
+        developerEmail: corrections.developerEmail,
+      },
+    });
+  }
+  if (corrections.developerEmail && !corrections.assignee) {
+    memories.push({
+      memory_type: "assignee_preference",
+      pattern: note || corrections.title || corrections.description || `Use ${corrections.developerEmail} for similar work`,
+      target: { developerName: corrections.developerName, developerEmail: corrections.developerEmail },
     });
   }
   if (note && memories.length === 0) {

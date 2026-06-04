@@ -192,7 +192,7 @@ export default function SetupPage() {
 
       <SectionCard id="slack" title="Slack Notifications" status={s("slack")}>
         <p className="text-[13px] text-[var(--foreground-secondary)]">
-          Get notified when new interview items are ready or tasks are auto-created.
+          Get notified when new interview items are ready or approved work is pushed to Jira.
           <span className="ml-1 text-[var(--foreground-tertiary)]">(Optional)</span>
         </p>
         <div className="flex flex-col gap-4">

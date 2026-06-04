@@ -45,6 +45,8 @@ function normalizeCorrections(value: unknown): LearningCorrections {
   if (typeof raw.description === "string" && raw.description.trim()) out.description = raw.description.trim();
   if (typeof raw.projectKey === "string" && raw.projectKey.trim()) out.projectKey = raw.projectKey.trim().toUpperCase();
   if (typeof raw.assignee === "string" && raw.assignee.trim()) out.assignee = raw.assignee.trim();
+  if (typeof raw.developerName === "string" && raw.developerName.trim()) out.developerName = raw.developerName.trim();
+  if (typeof raw.developerEmail === "string" && raw.developerEmail.trim()) out.developerEmail = raw.developerEmail.trim();
   if (raw.priority === "P0" || raw.priority === "P1" || raw.priority === "P2" || raw.priority === "P3") {
     out.priority = raw.priority;
   }

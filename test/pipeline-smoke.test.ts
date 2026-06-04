@@ -323,6 +323,8 @@ const {
                 "Alex committed to fix the queue callback region issue that makes Shiro transcript processing fail in production.",
               inferredAssignees: [{ name: "Alex", email: "alex@example.com" }],
               confidence: "high",
+              workType: "code",
+              repoContextNeeded: true,
               missingContext: [],
               sourceQuotes: [
                 {
@@ -341,6 +343,8 @@ const {
                 "The team said the Google Meet transcript fetch path is not fully owned and still needs a decision.",
               inferredAssignees: [],
               confidence: "medium",
+              workType: "unclear",
+              repoContextNeeded: true,
               missingContext: ["Who owns Google Meet OAuth and transcript fetching?"],
               sourceQuotes: [
                 {
@@ -680,13 +684,14 @@ describe("pipeline smoke", () => {
     });
 
     expect(db.extracted_tasks).toHaveLength(2);
-    const autoCreatedTask = db.extracted_tasks.find((task) => task.status === "auto_created");
+    const repoAnalyzedTask = db.extracted_tasks.find((task) => task.status === "awaiting_approval");
     const interviewTask = db.extracted_tasks.find((task) => task.status === "pending_interview");
 
-    expect(autoCreatedTask).toMatchObject({
+    expect(repoAnalyzedTask).toMatchObject({
       extracted_title: "Fix Shiro transcript queue region config",
       tracker_project: "ENG",
-      tracker_issue_key: "ENG-101",
+      tracker_issue_key: null,
+      approval_status: "awaiting_approval",
     });
     expect(interviewTask).toMatchObject({
       extracted_title: "Clarify Google Meet transcript API ownership",
@@ -695,18 +700,17 @@ describe("pipeline smoke", () => {
 
     expect(db.developer_briefs).toHaveLength(1);
     expect(db.developer_briefs[0]).toMatchObject({
-      task_id: autoCreatedTask!.id,
-      tracker_issue_key: "ENG-101",
-      status: "sent",
+      task_id: repoAnalyzedTask!.id,
+      tracker_issue_key: null,
+      status: "awaiting_pm_review",
       confidence: "high",
       error_code: null,
       error_detail: null,
     });
     expect(db.developer_briefs[0].brief.execution_pack.agent_prompt).toContain("Shiro transcript queue callbacks");
 
-    expect(fetchCalls.some((call) => call.url.endsWith("/rest/api/3/issue") && call.method === "POST")).toBe(true);
+    expect(fetchCalls.some((call) => call.url.endsWith("/rest/api/3/issue") && call.method === "POST")).toBe(false);
     expect(fetchCalls.some((call) => call.url.includes("api.github.com/search/code"))).toBe(true);
-    expect(fetchCalls.some((call) => call.url === "https://api.resend.com/emails")).toBe(true);
-    expect(fetchCalls.some((call) => call.url === "https://hooks.slack.example.test/services/T000/B000/XXX")).toBe(true);
+    expect(fetchCalls.some((call) => call.url === "https://api.resend.com/emails")).toBe(false);
   });
 });

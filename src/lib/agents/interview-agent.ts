@@ -4,7 +4,8 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { logger } from "@/lib/logger";
 import { interviewCompletionSchema } from "./schemas";
 import type { InterviewCompletion } from "./schemas";
-import type { Priority } from "@/lib/types";
+import type { ExtractedTaskRow, Priority } from "@/lib/types";
+import { inferWorkType } from "@/lib/services/task-readiness";
 
 const log = logger.child({ service: "interview-agent" });
 
@@ -156,7 +157,7 @@ export async function applyInterviewCompletion(
   taskId: string,
   completion: InterviewCompletion,
   chatHistory: InterviewMessage[]
-): Promise<void> {
+): Promise<ExtractedTaskRow> {
   const responses: Record<string, string> = {};
   for (let i = 0; i < chatHistory.length; i += 2) {
     const question = chatHistory[i]?.content || `Question ${i / 2 + 1}`;
@@ -165,31 +166,57 @@ export async function applyInterviewCompletion(
   }
 
   if (!completion.should_create) {
-    await supabaseAdmin
+    const query = supabaseAdmin
       .from("extracted_tasks")
       .update({
         status: "dismissed",
         dismissed_reason: completion.description,
         interview_responses: responses,
       })
-      .eq("id", taskId);
-    return;
+      .eq("id", taskId) as unknown as {
+        select?: (columns: string) => { single: () => Promise<{ data: unknown; error?: unknown }> };
+      };
+    if (typeof query.select === "function") {
+      const { data } = await query.select("*").single();
+      return data as ExtractedTaskRow;
+    }
+    return { id: taskId, status: "dismissed" } as ExtractedTaskRow;
   }
 
-  await supabaseAdmin
+  const workType = completion.workType ?? inferWorkType(
+    completion.labels,
+    `${completion.title} ${completion.description}`
+  );
+  const repoContextNeeded = workType === "code" || Boolean(completion.repoNames?.length);
+  const updates = {
+    status: repoContextNeeded ? "pending_repo_analysis" : "awaiting_approval",
+    approval_status: repoContextNeeded ? "not_ready" : "awaiting_approval",
+    extracted_title: completion.title,
+    extracted_description: completion.description,
+    inferred_assignees: completion.assignee
+      ? [{ name: completion.assignee, email: completion.developerEmail ?? undefined }]
+      : undefined,
+    assigned_developer_name: completion.assignee,
+    assigned_developer_email: completion.developerEmail ?? null,
+    tracker_project: completion.projectKey ?? undefined,
+    work_type: workType,
+    repo_context_needed: repoContextNeeded,
+    priority: completion.priority as Priority,
+    labels: completion.labels,
+    interview_responses: responses,
+  };
+  const query = supabaseAdmin
     .from("extracted_tasks")
-    .update({
-      status: "completed",
-      extracted_title: completion.title,
-      extracted_description: completion.description,
-      inferred_assignees: completion.assignee
-        ? [{ name: completion.assignee }]
-        : undefined,
-      priority: completion.priority as Priority,
-      labels: completion.labels,
-      interview_responses: responses,
-    })
-    .eq("id", taskId);
+    .update(updates)
+    .eq("id", taskId) as unknown as {
+      select?: (columns: string) => { single: () => Promise<{ data: unknown; error?: unknown }> };
+    };
+  if (typeof query.select === "function") {
+    const { data, error } = await query.select("*").single();
+    if (error || !data) throw error ?? new Error("Failed to apply interview completion");
+    return data as ExtractedTaskRow;
+  }
+  return { id: taskId, ...updates } as ExtractedTaskRow;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

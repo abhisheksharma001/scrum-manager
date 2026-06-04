@@ -15,7 +15,7 @@ export async function POST(
 
     const { data: task, error } = await supabaseAdmin
       .from("extracted_tasks")
-      .select("id, status, tracker_project")
+      .select("id, status, approval_status, tracker_project")
       .eq("id", id)
       .single();
 
@@ -27,6 +27,9 @@ export async function POST(
       throw new ValidationError(
         `Cannot retry: task is in '${task.status}' status, expected 'jira_failed'`
       );
+    }
+    if (task.approval_status !== "approved") {
+      throw new ValidationError("Cannot retry Jira creation before PM approval");
     }
 
     await supabaseAdmin

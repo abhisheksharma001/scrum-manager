@@ -6,7 +6,7 @@ vi.mock("@/lib/services/interview-queue", () => ({
 }));
 
 vi.mock("@/lib/jobs/queue", () => ({
-  enqueueJiraCreation: vi.fn().mockResolvedValue("job-1"),
+  enqueueRepoAnalysis: vi.fn().mockResolvedValue("job-1"),
 }));
 
 vi.mock("@/lib/services/notifications", () => ({
@@ -15,15 +15,19 @@ vi.mock("@/lib/services/notifications", () => ({
 
 import { POST } from "../[taskId]/complete/route";
 import { completeInterview } from "@/lib/services/interview-queue";
-import { enqueueJiraCreation } from "@/lib/jobs/queue";
+import { enqueueRepoAnalysis } from "@/lib/jobs/queue";
+
+vi.mock("@/lib/services/developer-brief", () => ({
+  createBrief: vi.fn().mockResolvedValue({ id: "brief-1" }),
+}));
 
 const routeContext = { params: Promise.resolve({ taskId: "task-1" }) };
 
 describe("POST /api/interviews/[taskId]/complete", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("returns 200 with task and enqueues Jira creation", async () => {
-    const mockTask = { id: "task-1", status: "completed" };
+  it("returns 200 with task and queues repo analysis for code work", async () => {
+    const mockTask = { id: "task-1", status: "pending_repo_analysis", work_type: "code", repo_context_needed: true };
     vi.mocked(completeInterview).mockResolvedValue(mockTask as never);
 
     const request = new NextRequest("http://localhost/api/interviews/task-1/complete", {
@@ -40,7 +44,7 @@ describe("POST /api/interviews/[taskId]/complete", () => {
 
     expect(response.status).toBe(200);
     expect(data.task).toEqual(mockTask);
-    expect(enqueueJiraCreation).toHaveBeenCalledWith({ taskId: "task-1" });
+    expect(enqueueRepoAnalysis).toHaveBeenCalledWith({ briefId: "brief-1" });
   });
 
   it("returns 400 when responses field is missing", async () => {

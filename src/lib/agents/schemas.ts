@@ -13,6 +13,7 @@ export const sourceQuoteSchema = z.object({
 
 export const confidenceSchema = z.enum(["high", "medium", "low"]);
 export const prioritySchema = z.enum(["P0", "P1", "P2", "P3"]);
+export const workTypeSchema = z.enum(["code", "non_code", "unclear"]);
 
 // ─── Extraction Agent Output ────────────────────────────────────────────────
 
@@ -23,6 +24,10 @@ export const extractedTaskSchema = z.object({
     .describe("Full context from the discussion — what, why, constraints"),
   inferredAssignees: z.array(assigneeSchema),
   confidence: confidenceSchema,
+  workType: workTypeSchema.describe("Whether this is code work, non-code work, or unclear"),
+  repoContextNeeded: z
+    .boolean()
+    .describe("True when GitHub/repository code context should be inspected before approval"),
   missingContext: z
     .array(z.string())
     .describe("Specific questions that couldn't be answered from the transcript"),
@@ -46,6 +51,10 @@ export const interviewCompletionSchema = z.object({
   title: z.string().describe("Refined task title"),
   description: z.string().describe("Full task description with gathered context"),
   assignee: z.string().nullable().describe("Person name or null"),
+  developerEmail: z.string().email().nullable().optional(),
+  projectKey: z.string().nullable().optional(),
+  repoNames: z.array(z.string()).optional(),
+  workType: workTypeSchema.optional(),
   priority: prioritySchema,
   labels: z.array(z.string()),
   should_create: z.boolean().describe("Whether the task should be created in Jira"),

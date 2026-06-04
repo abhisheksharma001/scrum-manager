@@ -573,7 +573,7 @@ export default function InterviewsPage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Interview Queue</h1>
           <p className="text-[13px] text-[var(--foreground-secondary)] mt-1">
-            Tasks requiring human input before Jira creation
+            Tasks requiring human input before repo analysis, approval, or Jira creation
           </p>
         </div>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--surface)] border border-[var(--border)] px-3 py-1 text-[12px] font-medium text-[var(--foreground-secondary)]">
@@ -638,15 +638,6 @@ export default function InterviewsPage() {
                   </div>
                 </div>
                 <div className="flex gap-1.5 shrink-0">
-                  <button
-                    onClick={() => setVoiceTask(task)}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--purple-muted)] text-[var(--purple)] px-3 py-1.5 text-[11px] font-semibold hover:brightness-110 transition-all"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 15a3 3 0 003-3V5a3 3 0 00-6 0v7a3 3 0 003 3z" />
-                    </svg>
-                    Voice
-                  </button>
                   <button
                     onClick={() => startAIChat(task)}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent-muted)] text-[var(--accent)] px-3 py-1.5 text-[11px] font-semibold hover:brightness-110 transition-all"

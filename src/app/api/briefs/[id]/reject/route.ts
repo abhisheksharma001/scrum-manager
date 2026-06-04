@@ -23,6 +23,12 @@ export async function POST(
       .select("task_id")
       .eq("id", id)
       .maybeSingle();
+    if (brief?.task_id) {
+      await supabaseAdmin
+        .from("extracted_tasks")
+        .update({ status: "awaiting_approval", approval_status: "rejected" })
+        .eq("id", brief.task_id);
+    }
     await learningStore.recordFeedback({
       ownerUserId: user.id,
       taskId: brief?.task_id ?? null,

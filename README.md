@@ -37,16 +37,17 @@ The normal app pipeline uses Claude through the Vercel AI SDK. The extraction ag
 
 The extractor is intentionally conservative. Casual chatter, repeated discussion, and ongoing work without a new action should be skipped.
 
-### Confidence routing
+### Confidence and approval routing
 
-Extracted tasks are routed by confidence:
+Extracted tasks are routed by confidence and work type:
 
-| Confidence | Default behavior |
+| Signal | Default behavior |
 |---|---|
-| `high` | Stored as `auto_created` and queued for Jira creation |
-| `medium` / `low` | Stored as `pending_interview` and shown in the interview queue |
+| Low confidence, unclear work type, missing owner, or missing repo/project context | Stored as `pending_interview` and shown in the interview queue |
+| Code-related task with enough context | Sent to repo analysis so a developer prompt pack can be generated before approval |
+| Non-code task with enough context | Marked `awaiting_approval` |
 
-The auto-create threshold is configurable in the `pipeline_config` table. By default, only high-confidence tasks go straight to Jira.
+Jira creation is approval-gated. Tasks and prompt packs do not create Jira issues until a PM approves them.
 
 ### Human interview flow
 

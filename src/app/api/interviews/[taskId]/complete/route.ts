@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { completeInterview } from "@/lib/services/interview-queue";
-import { enqueueJiraCreation } from "@/lib/jobs/queue";
+import { enqueueRepoAnalysis } from "@/lib/jobs/queue";
 import { requireAuth } from "@/lib/auth";
 import { apiError } from "@/lib/errors";
 import { parseBody } from "@/lib/validation";
 import { interviewCompleteBody } from "@/lib/validation";
 import { notifyInterviewCompleted } from "@/lib/services/notifications";
 import { learningStore } from "@/lib/learning/store";
+import { createBrief } from "@/lib/services/developer-brief";
+import { shouldAnalyzeRepo } from "@/lib/services/task-readiness";
 
 export async function POST(
   request: NextRequest,
@@ -16,7 +18,7 @@ export async function POST(
 
   try {
     const user = await requireAuth(request);
-    const { responses, assignee, priority, labels } = await parseBody(
+    const { responses, assignee, developerName, developerEmail, projectKey, repoNames, workType, priority, labels } = await parseBody(
       interviewCompleteBody,
       await request.json()
     );
@@ -24,6 +26,11 @@ export async function POST(
     const task = await completeInterview(taskId, user.id, {
       responses,
       assignee,
+      developerName,
+      developerEmail,
+      projectKey,
+      repoNames,
+      workType,
       priority,
       labels,
     });
@@ -32,13 +39,24 @@ export async function POST(
       ownerUserId: user.id,
       taskId: task.id,
       eventType: "correction",
-      scope: "just_this_ticket",
+      scope: repoNames?.length || developerEmail || projectKey ? "teach_system" : "just_this_ticket",
       note: "PM completed interview review.",
-      corrections: { assignee, priority, labels },
+      corrections: {
+        assignee,
+        developerName,
+        developerEmail,
+        projectKey,
+        repoNames,
+        priority,
+        labels,
+      },
       confidence: "medium",
     }).catch(() => null);
 
-    await enqueueJiraCreation({ taskId: task.id });
+    if (shouldAnalyzeRepo(task)) {
+      const brief = await createBrief(task.id, null);
+      await enqueueRepoAnalysis({ briefId: brief.id });
+    }
 
     // Notify team that interview is complete
     await notifyInterviewCompleted(

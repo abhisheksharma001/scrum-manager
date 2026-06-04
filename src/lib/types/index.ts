@@ -34,6 +34,8 @@ export interface NormalizedTranscript {
 
 export type Confidence = "high" | "medium" | "low";
 export type Priority = "P0" | "P1" | "P2" | "P3";
+export type WorkType = "code" | "non_code" | "unclear";
+export type ApprovalStatus = "not_ready" | "awaiting_approval" | "approved" | "rejected";
 
 export type TaskStatus =
   | "pending_interview"
@@ -42,7 +44,12 @@ export type TaskStatus =
   | "dismissed"
   | "auto_created"
   | "expired"
-  | "jira_failed";
+  | "jira_failed"
+  | "pending_repo_analysis"
+  | "awaiting_approval"
+  | "approved"
+  | "jira_created"
+  | "delivery_failed";
 
 export type BriefStatus =
   | "queued"
@@ -141,6 +148,8 @@ export interface ExtractedTask {
   description: string;
   inferredAssignees: { name: string; email?: string }[];
   confidence: Confidence;
+  workType: WorkType;
+  repoContextNeeded: boolean;
   missingContext: string[];
   sourceQuotes: { speaker: string; text: string; timestamp: number }[];
   priority: Priority;
@@ -175,6 +184,15 @@ export interface ExtractedTaskRow {
   extracted_description: string;
   inferred_assignees: { name: string; email?: string }[];
   confidence: Confidence;
+  work_type: WorkType;
+  repo_context_needed: boolean;
+  approval_status: ApprovalStatus;
+  approved_by: string | null;
+  approved_at: string | null;
+  assigned_developer_name: string | null;
+  assigned_developer_email: string | null;
+  repo_confidence: number | null;
+  routing_confidence: number | null;
   missing_context: string[];
   source_quotes: { speaker?: string; text: string; timestamp: number }[];
   priority: Priority;
@@ -219,6 +237,8 @@ export interface LearningCorrections {
   repoNames?: string[];
   paths?: string[];
   assignee?: string;
+  developerName?: string;
+  developerEmail?: string;
   priority?: Priority;
   labels?: string[];
 }
@@ -330,6 +350,11 @@ export type { IssueCreateResult as JiraCreateResult } from "@/lib/issue-tracker"
 export interface InterviewSubmission {
   responses: Record<string, string>;
   assignee?: string;
+  developerName?: string;
+  developerEmail?: string;
+  projectKey?: string;
+  repoNames?: string[];
+  workType?: WorkType;
   priority?: Priority;
   labels?: string[];
 }

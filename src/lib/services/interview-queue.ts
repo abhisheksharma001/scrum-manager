@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabase";
 import { logger } from "@/lib/logger";
 import type { ExtractedTaskRow, InterviewSubmission } from "@/lib/types";
+import { inferWorkType } from "./task-readiness";
 
 const log = logger.child({ service: "interview-queue" });
 
@@ -170,7 +171,8 @@ export async function saveInterviewProgress(
 }
 
 /**
- * Complete an interview and mark the task for Jira creation.
+ * Complete an interview and route the task toward repo analysis or approval.
+ * Jira creation remains approval-gated and is not triggered here.
  */
 export async function completeInterview(
   taskId: string,
@@ -191,15 +193,33 @@ export async function completeInterview(
     throw new Error("You do not have a claim on this interview");
   }
 
-  // Apply interview enrichments
+  const resolvedWorkType = submission.workType ?? task.work_type ?? inferWorkType(
+    submission.labels ?? task.labels ?? [],
+    `${task.extracted_title} ${task.extracted_description} ${Object.values(submission.responses).join(" ")}`
+  );
+  const repoContextNeeded = resolvedWorkType === "code" || Boolean(submission.repoNames?.length);
+  const nextStatus = repoContextNeeded ? "pending_repo_analysis" : "awaiting_approval";
+  const approvalStatus = nextStatus === "awaiting_approval" ? "awaiting_approval" : "not_ready";
+  const developerName = submission.developerName || submission.assignee;
+  const developerEmail = submission.developerEmail;
+
   const updates: Record<string, unknown> = {
-    status: "completed",
+    status: nextStatus,
+    approval_status: approvalStatus,
     interview_responses: submission.responses,
+    work_type: resolvedWorkType,
+    repo_context_needed: repoContextNeeded,
+    assigned_developer_name: developerName ?? null,
+    assigned_developer_email: developerEmail ?? null,
+    claimed_by: null,
+    claimed_at: null,
+    claim_expires_at: null,
   };
 
   if (submission.assignee) {
-    updates.inferred_assignees = [{ name: submission.assignee }];
+    updates.inferred_assignees = [{ name: submission.assignee, email: developerEmail }];
   }
+  if (submission.projectKey) updates.tracker_project = submission.projectKey.toUpperCase();
   if (submission.priority) {
     updates.priority = submission.priority;
   }

@@ -182,7 +182,7 @@ function ConfidenceThresholdControl() {
                     color: active ? "var(--accent)" : "var(--warning)",
                   }}
                 >
-                  {active ? "Auto-create" : "Interview"}
+                  {active ? "Can proceed" : "Interview"}
                 </span>
               </div>
             </button>
@@ -199,13 +199,13 @@ function ConfidenceThresholdControl() {
       <div className="rounded-lg bg-[var(--background-secondary)] border border-[var(--border-subtle)] p-3 text-[13px] text-[var(--foreground-secondary)]">
         <strong className="text-[var(--foreground)]">Current behavior:</strong>{" "}
         {autoLevels.length === 0 ? (
-          <>All tasks go through the interview queue before being created.</>
+          <>All tasks go through the interview queue before approval.</>
         ) : autoLevels.length === 3 ? (
-          <>All tasks are auto-created. The interview queue is bypassed entirely.</>
+          <>All confidence levels can proceed toward repo analysis or approval. Jira still requires PM approval.</>
         ) : (
           <>
             <strong>{autoLevels.map((l) => l.label.toLowerCase()).join(" and ")}</strong>{" "}
-            confidence tasks are auto-created.{" "}
+            confidence tasks can proceed toward repo analysis or approval.{" "}
             <strong>{interviewLevels.map((l) => l.label.toLowerCase()).join(" and ")}</strong>{" "}
             confidence tasks go through the interview queue.
           </>
@@ -385,7 +385,7 @@ function LocalLearningSettings() {
 }
 
 function ScrumReliefSettings() {
-  const [approvalMode, setApprovalMode] = useState("gate");
+  const [approvalMode] = useState("gate");
   const [minConfidence, setMinConfidence] = useState("high");
   const [repos, setRepos] = useState<ProjectRepo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -400,7 +400,6 @@ function ScrumReliefSettings() {
       .then(([configData, repoData]) => {
         const mode = configData.config?.brief_approval_mode;
         const confidence = configData.config?.auto_send_min_confidence;
-        if (typeof mode === "string") setApprovalMode(mode);
         if (typeof confidence === "string") setMinConfidence(confidence);
         setRepos(repoData.repos || []);
       })
@@ -429,7 +428,7 @@ function ScrumReliefSettings() {
     setSaved(false);
     try {
       await Promise.all([
-        persistConfig("brief_approval_mode", approvalMode),
+        persistConfig("brief_approval_mode", "gate"),
         persistConfig("auto_send_min_confidence", minConfidence),
         persistRepos(repos),
       ]);
@@ -461,10 +460,8 @@ function ScrumReliefSettings() {
       <div className="grid gap-3 md:grid-cols-2">
         <label className="flex flex-col gap-1">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--foreground-tertiary)]">Approval Mode</span>
-          <select value={approvalMode} onChange={(e) => setApprovalMode(e.target.value)} className="w-full">
-            <option value="gate">Gate: PM approves analysis and delivery</option>
-            <option value="confidence">Confidence: high confidence can auto-send</option>
-            <option value="auto">Auto: send every generated brief</option>
+          <select value={approvalMode} disabled className="w-full opacity-70">
+            <option value="gate">Gate: PM approval creates Jira and sends delivery</option>
           </select>
         </label>
         <label className="flex flex-col gap-1">

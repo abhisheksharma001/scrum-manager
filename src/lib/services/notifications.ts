@@ -138,7 +138,7 @@ export async function notifyNewInterviews(
 }
 
 /**
- * Notify when tasks are auto-created and pushed to Jira.
+ * Notify when approved tasks are pushed to Jira.
  */
 export async function notifyAutoCreatedTasks(
   transcript: TranscriptRow,
@@ -149,7 +149,7 @@ export async function notifyAutoCreatedTasks(
   await notifyAll(
     {
       type: "auto_pushed",
-      title: `${tasks.length} task${tasks.length > 1 ? "s" : ""} auto-pushed to Jira`,
+      title: `${tasks.length} approved task${tasks.length > 1 ? "s" : ""} pushed to Jira`,
       body: tasks.map((t) => `${t.jiraKey}: ${t.title}`).join(", "),
       link: "/tasks",
       metadata: {
@@ -164,7 +164,7 @@ export async function notifyAutoCreatedTasks(
           type: "header",
           text: {
             type: "plain_text",
-            text: `🚀 Tasks auto-created from: ${transcript.meeting_title}`,
+            text: `🚀 Approved tasks pushed from: ${transcript.meeting_title}`,
           },
         },
         {

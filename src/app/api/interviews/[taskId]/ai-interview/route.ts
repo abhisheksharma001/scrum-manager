@@ -4,12 +4,14 @@ import {
   continueAIInterview,
   applyInterviewCompletion,
 } from "@/lib/services/ai-interview";
-import { enqueueJiraCreation } from "@/lib/jobs/queue";
+import { enqueueRepoAnalysis } from "@/lib/jobs/queue";
 import { logger } from "@/lib/logger";
 import { requireAuth } from "@/lib/auth";
 import { apiError } from "@/lib/errors";
 import { parseBody, aiInterviewBody } from "@/lib/validation";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
+import { createBrief } from "@/lib/services/developer-brief";
+import { shouldAnalyzeRepo } from "@/lib/services/task-readiness";
 
 const log = logger.child({ route: "ai-interview" });
 
@@ -48,9 +50,10 @@ export async function POST(
         ...updatedHistory,
         { role: "assistant" as const, content: message },
       ];
-      await applyInterviewCompletion(taskId, completion, fullHistory);
-      if (completion.should_create) {
-        await enqueueJiraCreation({ taskId });
+      const task = await applyInterviewCompletion(taskId, completion, fullHistory);
+      if (completion.should_create && task && shouldAnalyzeRepo(task)) {
+        const brief = await createBrief(taskId, null);
+        await enqueueRepoAnalysis({ briefId: brief.id });
       }
     }
 

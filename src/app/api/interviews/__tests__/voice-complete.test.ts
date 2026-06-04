@@ -25,7 +25,7 @@ const routeContext = { params: Promise.resolve({ taskId: "task-1" }) };
 describe("POST /api/interviews/[taskId]/voice-complete", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("returns created action when should_create is true", async () => {
+  it("returns awaiting_approval action when should_create is true", async () => {
     const request = new NextRequest("http://localhost/api/interviews/task-1/voice-complete", {
       method: "POST",
       body: JSON.stringify({
@@ -40,8 +40,8 @@ describe("POST /api/interviews/[taskId]/voice-complete", () => {
     const data = await response.json();
 
     expect(response.status).toBe(200);
-    expect(data.action).toBe("created");
-    expect(enqueueJiraCreation).toHaveBeenCalledWith({ taskId: "task-1" });
+    expect(data.action).toBe("awaiting_approval");
+    expect(enqueueJiraCreation).not.toHaveBeenCalled();
   });
 
   it("returns dismissed action when should_create is false", async () => {

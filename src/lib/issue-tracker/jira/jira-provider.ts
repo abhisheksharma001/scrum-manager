@@ -41,6 +41,10 @@ export class JiraProvider implements IssueTrackerProvider {
     task: ExtractedTaskRow,
     project?: string
   ): Promise<IssueCreateResult & { refinedTitle: string }> {
+    if (task.approval_status !== "approved") {
+      throw new Error("Task must be approved before Jira creation");
+    }
+
     const config = this.getConfig();
     const projectKey = project || config.defaultProject;
     const issueLog = log.child({ taskId: task.id, project: projectKey });
@@ -194,6 +198,9 @@ export class JiraProvider implements IssueTrackerProvider {
 
     if (task.status !== "jira_failed") {
       throw new Error(`Task ${taskId} is not in jira_failed status`);
+    }
+    if (task.approval_status !== "approved") {
+      throw new Error("Task must be approved before Jira retry");
     }
 
     await supabaseAdmin

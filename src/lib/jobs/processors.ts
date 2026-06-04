@@ -19,9 +19,10 @@ import {
 } from "@/lib/services/notifications";
 import { supabaseAdmin } from "@/lib/supabase";
 import { logger } from "@/lib/logger";
-import { createBrief, getApprovalMode, setBriefStatus, getBriefConfig, getBrief } from "@/lib/services/developer-brief";
+import { createBrief, setBriefStatus, getBrief } from "@/lib/services/developer-brief";
 import { analyzeBrief } from "@/lib/services/repo-analysis";
 import { renderBriefPlainText } from "@/lib/services/brief-renderer";
+import { markTaskAwaitingApproval, shouldAnalyzeRepo, shouldInterviewTask } from "@/lib/services/task-readiness";
 import type { NormalizedTranscript, TranscriptProvider } from "@/lib/types";
 import type { DeveloperBrief } from "@/lib/types";
 
@@ -145,7 +146,8 @@ function safeParseConfig<T>(value: unknown, fallback: T): T {
 }
 
 /**
- * Process a transcript: extract tasks via Claude, store them, route to Jira or interview queue.
+ * Process a transcript: extract tasks via Claude, then route to interviews, repo analysis,
+ * or approval. Jira creation is approval-gated and is never triggered here.
  */
 export async function processTranscript(data: TranscriptProcessingJob) {
   const { transcriptId, provider, meetingTitle, meetingDate, attendees, duration, utterances } = data;
@@ -201,9 +203,32 @@ export async function processTranscript(data: TranscriptProcessingJob) {
     }
 
     if (storedTasks && storedTasks.length > 0) {
-      const autoCreated = storedTasks.filter((t) => t.status === "auto_created");
-      for (const task of autoCreated) {
-        await enqueueJiraCreation({ taskId: task.id });
+      const repoTasks = storedTasks.filter((t) => !shouldInterviewTask(t) && shouldAnalyzeRepo(t));
+      for (const task of repoTasks) {
+        const resolvedProject = task.tracker_project || await routeTaskToProject(task);
+        await supabaseAdmin
+          .from("extracted_tasks")
+          .update({
+            status: "pending_repo_analysis",
+            approval_status: "not_ready",
+            tracker_project: resolvedProject,
+          })
+          .eq("id", task.id);
+        task.tracker_project = resolvedProject;
+        const brief = await createBrief(task.id, null);
+        await enqueueRepoAnalysis({ briefId: brief.id });
+      }
+
+      const approvalTasks = storedTasks.filter((t) => !shouldInterviewTask(t) && !shouldAnalyzeRepo(t));
+      for (const task of approvalTasks) {
+        if (!task.tracker_project) {
+          const resolvedProject = await routeTaskToProject(task);
+          await supabaseAdmin
+            .from("extracted_tasks")
+            .update({ tracker_project: resolvedProject })
+            .eq("id", task.id);
+        }
+        await markTaskAwaitingApproval(task.id);
       }
 
       const transcriptRow = await getTranscript(transcriptId);
@@ -231,7 +256,7 @@ export async function processTranscript(data: TranscriptProcessingJob) {
 }
 
 /**
- * Create a Jira issue for an extracted task.
+ * Create a Jira issue for an approved extracted task.
  */
 export async function processJiraCreation(data: JiraCreationJob) {
   const { taskId, projectKey } = data;
@@ -249,19 +274,36 @@ export async function processJiraCreation(data: JiraCreationJob) {
     throw new Error(`Task not found: ${taskId}`);
   }
 
+  if (task.approval_status !== "approved") {
+    throw new Error("Task must be approved before Jira creation");
+  }
+
   try {
     const resolvedProject = projectKey || await routeTaskToProject(task);
     const result = await getIssueTracker().createIssue(task, resolvedProject);
+    await supabaseAdmin
+      .from("extracted_tasks")
+      .update({
+        status: "jira_created",
+        approval_status: "approved",
+        tracker_issue_key: result.issueKey,
+        tracker_error: null,
+      })
+      .eq("id", task.id);
     jobLog.info({ issueKey: result.issueKey, project: resolvedProject }, "Jira issue created");
 
     try {
-      const createdBrief = await createBrief(task.id, result.issueKey);
-      const mode = await getApprovalMode();
-      if (mode !== "gate") {
-        await enqueueRepoAnalysis({ briefId: createdBrief.id });
+      const { data: existingBrief } = await supabaseAdmin
+        .from("developer_briefs")
+        .select("id")
+        .eq("task_id", task.id)
+        .maybeSingle();
+      if (existingBrief?.id) {
+        await setBriefStatus(existingBrief.id, "sending", { tracker_issue_key: result.issueKey });
+        await enqueueBriefDelivery({ briefId: existingBrief.id });
       }
     } catch (briefErr) {
-      jobLog.warn({ err: briefErr }, "Jira issue created, but developer brief setup failed");
+      jobLog.warn({ err: briefErr }, "Jira issue created, but developer delivery setup failed");
     }
 
     const transcript = await getTranscript(task.transcript_id);
@@ -278,6 +320,14 @@ export async function processJiraCreation(data: JiraCreationJob) {
       .from("extracted_tasks")
       .update({ status: "jira_failed", tracker_error: errorMessage })
       .eq("id", taskId);
+    await supabaseAdmin
+      .from("developer_briefs")
+      .update({
+        status: "failed",
+        error_code: "jira_creation_failed",
+        error_detail: errorMessage,
+      })
+      .eq("task_id", taskId);
 
     await notifyPushFailed(taskId, task.extracted_title, errorMessage);
     throw err;
@@ -287,18 +337,6 @@ export async function processJiraCreation(data: JiraCreationJob) {
 export async function processRepoAnalysis(data: RepoAnalysisJob) {
   try {
     await analyzeBrief(data.briefId);
-    const updated = await getBrief(data.briefId);
-    const mode = await getApprovalMode();
-    const minConfidence = await getBriefConfig<"high" | "medium" | "low" | "none">(
-      "auto_send_min_confidence",
-      "high"
-    );
-    const order = { none: 0, low: 1, medium: 2, high: 3 };
-    const canAutoSend = updated.confidence && order[updated.confidence] >= order[minConfidence];
-    if (updated.status === "awaiting_pm_review" && (mode === "auto" || (mode === "confidence" && canAutoSend))) {
-      await setBriefStatus(updated.id, "sending");
-      await enqueueBriefDelivery({ briefId: updated.id });
-    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await setBriefStatus(data.briefId, "failed", {
@@ -336,12 +374,12 @@ export async function processBriefDelivery(data: BriefDeliveryJob) {
   try {
     const { sendBriefEmail } = await import("@/lib/services/email");
     await sendBriefEmail({
-      to: task.inferred_assignees?.[0]?.email,
+      to: task.assigned_developer_email ?? task.inferred_assignees?.[0]?.email,
       subject: `Developer prompt pack: ${task.extracted_title}`,
       brief: brief.brief,
       trackerUrl,
     });
-    delivery.email = task.inferred_assignees?.[0]?.email ? "sent" : "skipped_no_recipient";
+    delivery.email = (task.assigned_developer_email ?? task.inferred_assignees?.[0]?.email) ? "sent" : "skipped_no_recipient";
   } catch (err) {
     errors.push(`Email delivery failed: ${err instanceof Error ? err.message : String(err)}`);
     delivery.email = "failed";

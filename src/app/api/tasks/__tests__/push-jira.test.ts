@@ -35,12 +35,12 @@ describe("POST /api/tasks/:id/push-jira", () => {
     });
   }
 
-  it("returns 200 with issueKey for completable task", async () => {
+  it("returns 200 with issueKey for approved task", async () => {
     mockFrom.mockReturnValue({
       select: vi.fn().mockReturnValue({
         eq: vi.fn().mockReturnValue({
           single: vi.fn().mockResolvedValue({
-            data: { id: "task-1", status: "completed", tracker_issue_key: null, tracker_error: null, tracker_project: null },
+            data: { id: "task-1", status: "approved", approval_status: "approved", tracker_issue_key: null, tracker_error: null, tracker_project: null },
             error: null,
           }),
         }),
@@ -110,12 +110,43 @@ describe("POST /api/tasks/:id/push-jira", () => {
     expect(response.status).toBe(400);
   });
 
+  it("returns 400 when jira_failed task was never approved", async () => {
+    mockFrom.mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({
+            data: {
+              id: "task-1",
+              status: "jira_failed",
+              approval_status: "not_ready",
+              tracker_issue_key: null,
+              tracker_error: "previous failure",
+            },
+            error: null,
+          }),
+        }),
+      }),
+      update: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          then: vi.fn((cb: () => void) => { cb?.(); return Promise.resolve(); }),
+        }),
+      }),
+    });
+
+    const response = await POST(makeRequest(), {
+      params: Promise.resolve({ id: "task-1" }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(mockCreateIssue).not.toHaveBeenCalled();
+  });
+
   it("returns alreadyExists when task already has Jira key", async () => {
     mockFrom.mockReturnValue({
       select: vi.fn().mockReturnValue({
         eq: vi.fn().mockReturnValue({
           single: vi.fn().mockResolvedValue({
-            data: { id: "task-1", status: "completed", tracker_issue_key: "ENG-99", tracker_error: null },
+            data: { id: "task-1", status: "approved", approval_status: "approved", tracker_issue_key: "ENG-99", tracker_error: null },
             error: null,
           }),
         }),
@@ -137,7 +168,7 @@ describe("POST /api/tasks/:id/push-jira", () => {
       select: vi.fn().mockReturnValue({
         eq: vi.fn().mockReturnValue({
           single: vi.fn().mockResolvedValue({
-            data: { id: "task-1", status: "completed", tracker_issue_key: null, tracker_error: null, tracker_project: null },
+            data: { id: "task-1", status: "approved", approval_status: "approved", tracker_issue_key: null, tracker_error: null, tracker_project: null },
             error: null,
           }),
         }),

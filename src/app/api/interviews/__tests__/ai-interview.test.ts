@@ -8,12 +8,16 @@ vi.mock("@/lib/services/ai-interview", () => ({
 }));
 
 vi.mock("@/lib/jobs/queue", () => ({
-  enqueueJiraCreation: vi.fn().mockResolvedValue("job-1"),
+  enqueueRepoAnalysis: vi.fn().mockResolvedValue("job-1"),
+}));
+
+vi.mock("@/lib/services/developer-brief", () => ({
+  createBrief: vi.fn().mockResolvedValue({ id: "brief-1" }),
 }));
 
 import { POST } from "../[taskId]/ai-interview/route";
 import { startAIInterview, continueAIInterview, applyInterviewCompletion } from "@/lib/services/ai-interview";
-import { enqueueJiraCreation } from "@/lib/jobs/queue";
+import { enqueueRepoAnalysis } from "@/lib/jobs/queue";
 
 const routeContext = { params: Promise.resolve({ taskId: "task-1" }) };
 
@@ -62,7 +66,7 @@ describe("POST /api/interviews/[taskId]/ai-interview", () => {
     expect(data.completion).toBeNull();
   });
 
-  it("applies completion and enqueues Jira when reply finishes", async () => {
+  it("applies completion and queues repo analysis when reply finishes for code work", async () => {
     const completion = {
       title: "Ship webhook",
       description: "Full desc",
@@ -76,6 +80,11 @@ describe("POST /api/interviews/[taskId]/ai-interview", () => {
       message: "Thanks, I have everything I need!",
       completion,
     });
+    vi.mocked(applyInterviewCompletion).mockResolvedValue({
+      id: "task-1",
+      work_type: "code",
+      repo_context_needed: true,
+    } as never);
 
     const request = new NextRequest("http://localhost/api/interviews/task-1/ai-interview", {
       method: "POST",
@@ -94,7 +103,7 @@ describe("POST /api/interviews/[taskId]/ai-interview", () => {
 
     expect(response.status).toBe(200);
     expect(applyInterviewCompletion).toHaveBeenCalled();
-    expect(enqueueJiraCreation).toHaveBeenCalledWith({ taskId: "task-1" });
+    expect(enqueueRepoAnalysis).toHaveBeenCalledWith({ briefId: "brief-1" });
     expect(data.completion).toEqual(completion);
   });
 

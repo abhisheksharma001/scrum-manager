@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../queue", () => ({
   enqueueJiraCreation: vi.fn().mockResolvedValue("msg-1"),
+  enqueueRepoAnalysis: vi.fn().mockResolvedValue("msg-2"),
+  enqueueBriefDelivery: vi.fn().mockResolvedValue("msg-3"),
 }));
 
 vi.mock("@/lib/logger", () => {
@@ -58,6 +60,7 @@ vi.mock("@/lib/supabase", () => {
   const mockSingle = vi.fn().mockResolvedValue({
     data: {
       id: "t-1",
+      transcript_id: "t-1",
       meeting_title: "Test",
       meeting_date: "2026-03-26",
       attendees: [],
@@ -65,6 +68,14 @@ vi.mock("@/lib/supabase", () => {
       provider: "manual",
       external_id: "ext-1",
       duration: 600,
+      status: "approved",
+      approval_status: "approved",
+      tracker_issue_key: null,
+      inferred_assignees: [],
+      extracted_title: "Task",
+      extracted_description: "Desc",
+      labels: [],
+      priority: "P2",
     },
     error: null,
   });

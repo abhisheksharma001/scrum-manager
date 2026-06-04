@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-import { enqueueJiraCreation } from "@/lib/jobs/queue";
 import { logger } from "@/lib/logger";
 import { requireAuth } from "@/lib/auth";
 import { apiError } from "@/lib/errors";
@@ -50,7 +49,8 @@ export async function POST(
     await supabaseAdmin
       .from("extracted_tasks")
       .update({
-        status: "completed",
+        status: "awaiting_approval",
+        approval_status: "awaiting_approval",
         extracted_title: title,
         extracted_description: description,
         inferred_assignees: assignee ? [{ name: assignee }] : undefined,
@@ -60,10 +60,8 @@ export async function POST(
       })
       .eq("id", taskId);
 
-    await enqueueJiraCreation({ taskId });
-
-    log.info({ taskId }, "Voice interview completed, Jira creation queued");
-    return NextResponse.json({ ok: true, action: "created" });
+    log.info({ taskId }, "Voice interview completed, task awaiting approval");
+    return NextResponse.json({ ok: true, action: "awaiting_approval" });
   } catch (err) {
     return apiError(err, { route: "interviews/voice-complete", taskId });
   }

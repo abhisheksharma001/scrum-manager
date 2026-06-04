@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { getRepoReader } from "./github-reader";
 import { resolveReposForTask } from "./repo-resolver";
 import { getBrief, getBriefConfig, setBriefStatus } from "./developer-brief";
+import { markTaskAwaitingApproval, updateTaskStatus } from "./task-readiness";
 import type { DeveloperBriefOutput } from "@/lib/agents/schemas";
 
 interface BriefBudget {
@@ -56,6 +57,13 @@ export async function analyzeBrief(briefId: string) {
         missing_info: ["Map a repository for the selected tracker project."],
         repos: [],
       });
+      await updateTaskStatus(task.id, "pending_interview", {
+        approval_status: "not_ready",
+        missing_context: [
+          ...((task.missing_context as string[] | null) ?? []),
+          "Which GitHub repository should be used for this task?",
+        ],
+      });
       return;
     }
 
@@ -97,6 +105,14 @@ export async function analyzeBrief(briefId: string) {
         missing_info: ["No relevant files were found. Provide more specific implementation context."],
         repos: repos.map((r) => r.repo),
       });
+      await updateTaskStatus(task.id, "pending_interview", {
+        approval_status: "not_ready",
+        repo_confidence: 0,
+        missing_context: [
+          ...((task.missing_context as string[] | null) ?? []),
+          "Which files or areas of the repo are relevant to this task?",
+        ],
+      });
       return;
     }
 
@@ -121,7 +137,7 @@ export async function analyzeBrief(briefId: string) {
         taskDescription: task.extracted_description,
         assignee: task.inferred_assignees?.[0]?.name ?? null,
         trackerKey: task.tracker_issue_key ?? null,
-        trackerUrl: task.tracker_issue_key
+        trackerUrl: task.tracker_issue_key && process.env.JIRA_BASE_URL
           ? `${process.env.JIRA_BASE_URL}/browse/${task.tracker_issue_key}`
           : null,
         repos: repos.map((r) => r.repo),
@@ -174,6 +190,14 @@ export async function analyzeBrief(briefId: string) {
       error_code: null,
       error_detail: null,
     });
+    await markTaskAwaitingApproval(task.id);
+    await supabaseAdmin
+      .from("extracted_tasks")
+      .update({
+        repo_confidence: confidence === "high" ? 0.9 : confidence === "medium" ? 0.65 : confidence === "low" ? 0.35 : 0,
+        routing_confidence: repos[0]?.isPrimary ? 0.75 : 0.6,
+      })
+      .eq("id", task.id);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     await setBriefStatus(briefId, "failed", {

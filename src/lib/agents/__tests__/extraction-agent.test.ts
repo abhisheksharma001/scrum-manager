@@ -100,6 +100,8 @@ describe("mapToExtractedTask", () => {
         { name: "Jordan" },
       ],
       confidence: "high" as const,
+      workType: "code" as const,
+      repoContextNeeded: true,
       missingContext: ["What's the deadline?"],
       sourceQuotes: [{ speaker: "Alex", text: "Alex said Friday", timestamp: 30 }],
       priority: "P1" as const,
@@ -116,6 +118,8 @@ describe("mapToExtractedTask", () => {
         { name: "Jordan", email: undefined },
       ],
       confidence: "high",
+      workType: "code",
+      repoContextNeeded: true,
       missingContext: ["What's the deadline?"],
       sourceQuotes: [{ speaker: "Alex", text: "Alex said Friday", timestamp: 30 }],
       priority: "P1",
@@ -133,7 +137,7 @@ describe("storeAndRouteExtractedTasks", async () => {
     vi.clearAllMocks();
   });
 
-  it("routes high-confidence tasks to auto_created", async () => {
+  it("routes high-confidence code tasks to pending_repo_analysis", async () => {
     const mockInsert = vi.fn().mockReturnValue({
       select: vi.fn().mockReturnValue({
         single: vi.fn().mockResolvedValue({ data: { id: "task-1" }, error: null }),
@@ -146,8 +150,10 @@ describe("storeAndRouteExtractedTasks", async () => {
         {
           title: "High conf task",
           description: "desc",
-          inferredAssignees: [],
+          inferredAssignees: [{ name: "Alex", email: "alex@example.com" }],
           confidence: "high",
+          workType: "code",
+          repoContextNeeded: true,
           missingContext: [],
           sourceQuotes: [],
           priority: "P1",
@@ -160,7 +166,7 @@ describe("storeAndRouteExtractedTasks", async () => {
 
     expect(result).toEqual(["task-1"]);
     const insertCall = mockInsert.mock.calls[0][0];
-    expect(insertCall.status).toBe("auto_created");
+    expect(insertCall.status).toBe("pending_repo_analysis");
   });
 
   it("routes medium-confidence tasks to pending_interview", async () => {
@@ -178,6 +184,8 @@ describe("storeAndRouteExtractedTasks", async () => {
           description: "desc",
           inferredAssignees: [],
           confidence: "medium",
+          workType: "non_code",
+          repoContextNeeded: false,
           missingContext: [],
           sourceQuotes: [],
           priority: "P2",
@@ -193,7 +201,37 @@ describe("storeAndRouteExtractedTasks", async () => {
     expect(insertCall.status).toBe("pending_interview");
   });
 
-  it("auto-creates both high and medium when threshold includes both", async () => {
+  it("routes high-confidence tasks with missing context to pending_interview", async () => {
+    const mockInsert = vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        single: vi.fn().mockResolvedValue({ data: { id: "task-missing" }, error: null }),
+      }),
+    });
+    vi.mocked(supabaseAdmin.from).mockReturnValue({ insert: mockInsert } as never);
+
+    await storeAndRouteExtractedTasks({
+      tasks: [
+        {
+          title: "Ship feature",
+          description: "desc",
+          inferredAssignees: [{ name: "Alex", email: "alex@example.com" }],
+          confidence: "high",
+          workType: "code",
+          repoContextNeeded: true,
+          missingContext: ["Which repo should be changed?"],
+          sourceQuotes: [],
+          priority: "P1",
+          labels: ["backend"],
+        },
+      ],
+      transcriptId: "t-1",
+      processingTimeMs: 100,
+    });
+
+    expect(mockInsert.mock.calls[0][0].status).toBe("pending_interview");
+  });
+
+  it("routes clear non-code tasks to awaiting approval", async () => {
     const mockInsert = vi.fn().mockReturnValue({
       select: vi.fn().mockReturnValue({
         single: vi.fn().mockResolvedValue({ data: { id: "task-3" }, error: null }),
@@ -207,8 +245,10 @@ describe("storeAndRouteExtractedTasks", async () => {
           {
             title: "Med task",
             description: "d",
-            inferredAssignees: [],
+            inferredAssignees: [{ name: "Priya", email: "priya@example.com" }],
             confidence: "medium",
+            workType: "non_code",
+            repoContextNeeded: false,
             missingContext: [],
             sourceQuotes: [],
             priority: "P2",
@@ -221,7 +261,7 @@ describe("storeAndRouteExtractedTasks", async () => {
       ["high", "medium"]
     );
 
-    expect(mockInsert.mock.calls[0][0].status).toBe("auto_created");
+    expect(mockInsert.mock.calls[0][0].status).toBe("awaiting_approval");
   });
 
   it("continues on DB insert failure and returns partial IDs", async () => {
@@ -241,8 +281,8 @@ describe("storeAndRouteExtractedTasks", async () => {
 
     const result = await storeAndRouteExtractedTasks({
       tasks: [
-        { title: "Fail", description: "d", inferredAssignees: [], confidence: "high", missingContext: [], sourceQuotes: [], priority: "P1", labels: [] },
-        { title: "Success", description: "d", inferredAssignees: [], confidence: "high", missingContext: [], sourceQuotes: [], priority: "P1", labels: [] },
+        { title: "Fail", description: "d", inferredAssignees: [], confidence: "high", workType: "code", repoContextNeeded: true, missingContext: [], sourceQuotes: [], priority: "P1", labels: [] },
+        { title: "Success", description: "d", inferredAssignees: [], confidence: "high", workType: "code", repoContextNeeded: true, missingContext: [], sourceQuotes: [], priority: "P1", labels: [] },
       ],
       transcriptId: "t-1",
       processingTimeMs: 0,

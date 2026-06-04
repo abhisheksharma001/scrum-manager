@@ -9,6 +9,7 @@ import type {
   ExtractedTask,
   ExtractionResult,
 } from "@/lib/types";
+import { inferWorkType } from "@/lib/services/task-readiness";
 
 const log = logger.child({ service: "extraction-agent" });
 
@@ -22,6 +23,11 @@ For each task, provide:
   - high: Clear owner, specific deliverable, timeline mentioned (e.g., "Sean will ship the webhook by Friday")
   - medium: Action discussed but owner or scope is ambiguous (e.g., "Someone should look into the latency issue")
   - low: Vague reference to future work, no clear owner or deliverable (e.g., "We should think about scaling")
+- workType: "code" | "non_code" | "unclear"
+  - code: software implementation, bug fix, infrastructure, API, frontend, backend, database, integration, tests, deployment, repo/code references
+  - non_code: planning, customer follow-up, scheduling, business/admin work, or non-implementation documentation
+  - unclear: the project or task intent is too ambiguous to know whether code/repo context is needed
+- repoContextNeeded: true when GitHub/repository code context should be inspected before approval; false for clearly non-code tasks
 - missingContext: Array of specific questions you couldn't answer from the transcript. Be precise — these will be asked to a human.
   Examples: "Who should own this?", "What's the deadline?", "Which service is affected?", "Is this blocked on anything?"
 - sourceQuotes: Array of relevant excerpts from the transcript with approximate timestamps and the speaker name. Include the most relevant 1-3 quotes.
@@ -35,6 +41,7 @@ Rules:
 - Handle noisy transcripts gracefully — speaker misattribution and filler words are common, but pay attention to who proposed, volunteered for, or was assigned each task.
 - If a task references ongoing work from a previous meeting (e.g., "still working on X"), skip it unless there's a new action or change in scope.
 - Be conservative with "high" confidence — only use it when owner AND deliverable AND timeline are all clear.
+- Treat unclear project, unclear repo need, or missing owner as reasons to lower confidence or mark workType as unclear.
 - If no action items are found, return an empty tasks array.`;
 
 
@@ -108,6 +115,9 @@ export function mapToExtractedTask(
       email: a.email,
     })),
     confidence: item.confidence,
+    workType: item.workType ?? inferWorkType(item.labels, `${item.title} ${item.description}`),
+    repoContextNeeded:
+      item.repoContextNeeded ?? inferWorkType(item.labels, `${item.title} ${item.description}`) === "code",
     missingContext: item.missingContext,
     sourceQuotes: item.sourceQuotes,
     priority: item.priority,
@@ -141,15 +151,24 @@ export function formatTimestamp(seconds: number): string {
  */
 export async function storeAndRouteExtractedTasks(
   result: ExtractionResult,
-  autoCreateThreshold: string[] = ["high"]
+  _autoCreateThreshold: string[] = ["high"]
 ): Promise<string[]> {
   const taskIds: string[] = [];
   const transcriptOwner = await fetchTranscriptOwner(result.transcriptId);
 
   for (const task of result.tasks) {
-    const status = autoCreateThreshold.includes(task.confidence)
-      ? "auto_created"
-      : "pending_interview";
+    const shouldInterview =
+      task.confidence === "low" ||
+      task.workType === "unclear" ||
+      task.inferredAssignees.length === 0 ||
+      task.missingContext.length > 0;
+    const status = shouldInterview
+      ? "pending_interview"
+      : task.repoContextNeeded || task.workType === "code"
+        ? "pending_repo_analysis"
+        : "awaiting_approval";
+    const approvalStatus = status === "awaiting_approval" ? "awaiting_approval" : "not_ready";
+    const primaryAssignee = task.inferredAssignees[0] ?? null;
 
     const { data, error } = await supabaseAdmin
       .from("extracted_tasks")
@@ -159,6 +178,11 @@ export async function storeAndRouteExtractedTasks(
         extracted_description: task.description,
         inferred_assignees: task.inferredAssignees,
         confidence: task.confidence,
+        work_type: task.workType,
+        repo_context_needed: task.repoContextNeeded,
+        approval_status: approvalStatus,
+        assigned_developer_name: primaryAssignee?.name ?? null,
+        assigned_developer_email: primaryAssignee?.email ?? null,
         missing_context: task.missingContext,
         source_quotes: task.sourceQuotes,
         priority: task.priority,

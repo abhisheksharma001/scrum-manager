@@ -4,7 +4,7 @@ import { routeTaskToProject } from "@/lib/agents/routing-agent";
 import { supabaseAdmin } from "@/lib/supabase";
 import { logger } from "@/lib/logger";
 import { requireAuth } from "@/lib/auth";
-import { apiError, NotFoundError, ValidationError } from "@/lib/errors";
+import { AppError, apiError, NotFoundError, ValidationError } from "@/lib/errors";
 import { parseBody } from "@/lib/validation";
 import { pushJiraBody } from "@/lib/validation";
 
@@ -13,7 +13,7 @@ const log = logger.child({ route: "push-jira" });
 /**
  * POST /api/tasks/:id/push-jira
  *
- * Push a completed or auto_created task to Jira.
+ * Push an approved task to Jira.
  * Unlike retry-jira (which only handles jira_failed), this handles
  * the initial push for tasks that have been through the interview flow.
  */
@@ -39,11 +39,14 @@ export async function POST(
       throw new NotFoundError("Task not found");
     }
 
-    const pushableStatuses = ["completed", "auto_created", "jira_failed"];
+    const pushableStatuses = ["approved", "jira_failed"];
     if (!pushableStatuses.includes(task.status)) {
       throw new ValidationError(
         `Cannot push to Jira: task is in '${task.status}' status. Expected one of: ${pushableStatuses.join(", ")}`
       );
+    }
+    if (task.approval_status !== "approved") {
+      throw new ValidationError("Cannot push to Jira before PM approval");
     }
 
     if (task.tracker_issue_key) {
@@ -72,6 +75,15 @@ export async function POST(
 
     const resolvedProject = await routeTaskToProject(task);
     const result = await getIssueTracker().createIssue(task, resolvedProject);
+    await supabaseAdmin
+      .from("extracted_tasks")
+      .update({
+        status: "jira_created",
+        approval_status: "approved",
+        tracker_issue_key: result.issueKey,
+        tracker_error: null,
+      })
+      .eq("id", id);
 
     log.info({ taskId: id, issueKey: result.issueKey, project: resolvedProject }, "Task pushed to Jira");
 
@@ -84,11 +96,13 @@ export async function POST(
     const message = err instanceof Error ? err.message : "Failed to push to Jira";
     log.error({ err, taskId: id }, "Push to Jira failed");
 
-    await supabaseAdmin
-      .from("extracted_tasks")
-      .update({ status: "jira_failed", tracker_error: message })
-      .eq("id", id)
-      .then(() => {});
+    if (!(err instanceof AppError && err.statusCode < 500)) {
+      await supabaseAdmin
+        .from("extracted_tasks")
+        .update({ status: "jira_failed", tracker_error: message })
+        .eq("id", id)
+        .then(() => {});
+    }
 
     return apiError(err, { route: "push-jira" });
   }
