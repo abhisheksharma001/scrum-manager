@@ -64,6 +64,22 @@ export async function POST(
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
+    // Provider-level validation (HMAC, clientState, etc.) on top of the shared secret
+    const headers = Object.fromEntries(request.headers);
+    if (!provider.validateWebhook(headers, body)) {
+      log.warn({ provider: providerName }, "Provider webhook validation failed");
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // MS Graph validation handshake — must echo the token as plain text
+    const validationToken = (body as { validationToken?: unknown })?.validationToken;
+    if (typeof validationToken === "string") {
+      return new NextResponse(validationToken, {
+        status: 200,
+        headers: { "Content-Type": "text/plain" },
+      });
+    }
+
     const parsed = provider.parseWebhook(body);
     if (!parsed) {
       return NextResponse.json({ ok: true });
