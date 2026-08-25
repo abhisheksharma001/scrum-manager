@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { parseVTT, ZoomProvider } from "../zoom";
 import fs from "fs";
 import path from "path";
@@ -170,6 +170,146 @@ describe("ZoomProvider", () => {
         payload: { object: {} },
       };
       expect(provider.parseWebhook(body)).toBeNull();
+    });
+  });
+
+  describe("fetchTranscript", () => {
+    const provider = new ZoomProvider();
+    const metadata = {
+      meetingId: 12345,
+      topic: "Sprint Planning",
+      startTime: "2026-03-26T10:00:00Z",
+      duration: 60,
+      downloadUrl: "https://zoom.us/download/transcript.vtt",
+    };
+
+    const vttContent = `WEBVTT
+
+00:00:01.000 --> 00:00:05.000
+Sean: Let's start sprint planning.
+
+00:00:06.000 --> 00:00:10.000
+Alex: I'll take the webhook ticket.`;
+
+    function mockFetchSequence(responses: Array<Partial<Response>>) {
+      const fetchMock = vi.fn();
+      for (const res of responses) {
+        fetchMock.mockResolvedValueOnce(res as Response);
+      }
+      vi.stubGlobal("fetch", fetchMock);
+      return fetchMock;
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      delete process.env.ZOOM_ACCOUNT_ID;
+      delete process.env.ZOOM_CLIENT_ID;
+      delete process.env.ZOOM_CLIENT_SECRET;
+    });
+
+    it("throws when S2S OAuth credentials are missing", async () => {
+      await expect(provider.fetchTranscript("uuid-1", metadata)).rejects.toThrow(
+        /Zoom S2S OAuth is not configured/
+      );
+    });
+
+    it("throws when the OAuth token request fails", async () => {
+      process.env.ZOOM_ACCOUNT_ID = "acct";
+      process.env.ZOOM_CLIENT_ID = "id";
+      process.env.ZOOM_CLIENT_SECRET = "secret";
+
+      const fetchMock = mockFetchSequence([
+        { ok: false, status: 401, statusText: "Unauthorized" },
+      ]);
+
+      await expect(provider.fetchTranscript("uuid-1", metadata)).rejects.toThrow(
+        /Zoom OAuth token request failed: 401/
+      );
+      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(String(fetchMock.mock.calls[0][0])).toContain(
+        "grant_type=account_credentials&account_id=acct"
+      );
+    });
+
+    it("throws when the transcript download fails", async () => {
+      process.env.ZOOM_ACCOUNT_ID = "acct";
+      process.env.ZOOM_CLIENT_ID = "id";
+      process.env.ZOOM_CLIENT_SECRET = "secret";
+
+      const fetchMock = mockFetchSequence([
+        {
+          ok: true,
+          status: 200,
+          json: async () => ({ access_token: "token-abc" }),
+        },
+        { ok: false, status: 403, statusText: "Forbidden" },
+      ]);
+
+      await expect(provider.fetchTranscript("uuid-1", metadata)).rejects.toThrow(
+        /Failed to download Zoom transcript: 403/
+      );
+      expect(fetchMock.mock.calls[1][0]).toBe(metadata.downloadUrl);
+    });
+
+    it("downloads the VTT and parses it on the happy path", async () => {
+      process.env.ZOOM_ACCOUNT_ID = "acct";
+      process.env.ZOOM_CLIENT_ID = "id";
+      process.env.ZOOM_CLIENT_SECRET = "secret";
+
+      const fetchMock = mockFetchSequence([
+        {
+          ok: true,
+          status: 200,
+          json: async () => ({ access_token: "token-abc" }),
+        },
+        { ok: true, status: 200, text: async () => vttContent },
+      ]);
+
+      const transcript = await provider.fetchTranscript("uuid-1", metadata);
+
+      // Token request uses Basic auth, download uses Bearer token
+      expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toEqual({
+        Authorization: expect.stringMatching(/^Basic /),
+      });
+      expect((fetchMock.mock.calls[1][1] as RequestInit).headers).toEqual({
+        Authorization: "Bearer token-abc",
+      });
+
+      expect(transcript.provider).toBe("zoom");
+      expect(transcript.externalId).toBe("uuid-1");
+      expect(transcript.meetingTitle).toBe("Sprint Planning");
+      expect(transcript.meetingDate).toEqual(new Date("2026-03-26T10:00:00Z"));
+      expect(transcript.duration).toBe(60);
+      expect(transcript.rawFormat).toBe("vtt");
+      expect(transcript.utterances).toHaveLength(2);
+      expect(transcript.utterances[0].speaker).toBe("Sean");
+      expect(transcript.attendees).toEqual([
+        { name: "Sean" },
+        { name: "Alex" },
+      ]);
+    });
+
+    it("falls back to utterance-derived duration and attendees", async () => {
+      process.env.ZOOM_ACCOUNT_ID = "acct";
+      process.env.ZOOM_CLIENT_ID = "id";
+      process.env.ZOOM_CLIENT_SECRET = "secret";
+
+      mockFetchSequence([
+        {
+          ok: true,
+          status: 200,
+          json: async () => ({ access_token: "token-abc" }),
+        },
+        { ok: true, status: 200, text: async () => vttContent },
+      ]);
+
+      const transcript = await provider.fetchTranscript("uuid-2", {
+        downloadUrl: "https://zoom.us/download/transcript.vtt",
+      });
+
+      expect(transcript.meetingTitle).toBe("Untitled Meeting");
+      expect(transcript.duration).toBe(10); // last utterance endTime
+      expect(transcript.utterances).toHaveLength(2);
     });
   });
 });

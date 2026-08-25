@@ -103,21 +103,112 @@ export class ZoomProvider implements TranscriptProviderAdapter {
     };
   }
 
-  async fetchTranscript(externalId: string): Promise<NormalizedTranscript> {
-    // TODO: Implement actual Zoom API calls
-    // 1. Get S2S OAuth token
-    // 2. Fetch recording details: GET /meetings/{meetingId}/recordings
-    // 3. Download the VTT transcript file
-    // 4. Parse VTT into utterances
-    // 5. Fetch meeting participants for attendee list
-
+  async fetchTranscript(
+    externalId: string,
+    metadata?: Record<string, unknown>
+  ): Promise<NormalizedTranscript> {
     logger.info({ externalId }, "Fetching Zoom transcript");
 
+    const downloadUrl = metadata?.downloadUrl as string | undefined;
+    if (!downloadUrl) {
+      throw new Error(
+        `No transcript downloadUrl in webhook metadata for: ${externalId}.`
+      );
+    }
+
+    const token = await fetchZoomOAuthToken();
+    const vttContent = await downloadTranscript(downloadUrl, token);
+    const utterances = parseVTT(vttContent);
+
+    // Derive attendees from the speakers seen in the transcript
+    const attendees = Array.from(new Set(utterances.map((u) => u.speaker)))
+      .filter((s) => s !== "Unknown")
+      .map((name) => ({ name }));
+
+    return {
+      provider: "zoom",
+      externalId,
+      meetingTitle:
+        (metadata?.topic as string | undefined) || "Untitled Meeting",
+      meetingDate: metadata?.startTime
+        ? new Date(metadata.startTime as string)
+        : new Date(),
+      duration:
+        (metadata?.duration as number | undefined) ||
+        (utterances.length > 0
+          ? Math.max(...utterances.map((u) => u.endTime))
+          : 0),
+      attendees,
+      utterances,
+      rawFormat: "vtt",
+      metadata: {
+        source: "zoom",
+        meetingId: metadata?.meetingId,
+        downloadedAt: new Date().toISOString(),
+      },
+    };
+  }
+}
+
+/**
+ * Get a Server-to-Server OAuth access token from Zoom.
+ *
+ * NOTE: This path has only been verified against mocked HTTP responses.
+ * Live verification requires real Zoom Server-to-Server OAuth credentials
+ * (account id + client id + client secret) from a Zoom Marketplace app.
+ */
+async function fetchZoomOAuthToken(): Promise<string> {
+  const accountId = process.env.ZOOM_ACCOUNT_ID;
+  const clientId = process.env.ZOOM_CLIENT_ID;
+  const clientSecret = process.env.ZOOM_CLIENT_SECRET;
+
+  if (!accountId || !clientId || !clientSecret) {
     throw new Error(
-      `Zoom fetchTranscript not yet implemented for: ${externalId}. ` +
-        "Requires S2S OAuth setup and Zoom API integration."
+      "Zoom S2S OAuth is not configured. Set ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, and ZOOM_CLIENT_SECRET."
     );
   }
+
+  const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+  const response = await fetch(
+    `https://zoom.us/oauth/token?grant_type=account_credentials&account_id=${encodeURIComponent(accountId)}`,
+    {
+      method: "POST",
+      headers: { Authorization: `Basic ${basic}` },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Zoom OAuth token request failed: ${response.status} ${response.statusText}`
+    );
+  }
+
+  const data = (await response.json()) as { access_token?: string };
+  if (!data.access_token) {
+    throw new Error("Zoom OAuth token response missing access_token");
+  }
+
+  return data.access_token;
+}
+
+/**
+ * Download the VTT transcript file from the recording's downloadUrl.
+ */
+async function downloadTranscript(
+  downloadUrl: string,
+  accessToken: string
+): Promise<string> {
+  const response = await fetch(downloadUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to download Zoom transcript: ${response.status} ${response.statusText}`
+    );
+  }
+
+  return response.text();
 }
 
 /**
