@@ -1,0 +1,37 @@
+WEBVTT
+
+00:00:00.500 --> 00:00:04.000
+Priya: Alright everyone, sprint 42 planning. Let's walk through the backlog top to bottom.
+
+00:00:04.500 --> 00:00:12.000
+Priya: First up, the billing export job. Marcus, you flagged it last sprint — what's the scope?
+
+00:00:12.500 --> 00:00:22.000
+Marcus: Right. We need a nightly CSV export of all invoices for the finance team. I estimate three days including tests and the S3 upload step.
+
+00:00:22.500 --> 00:00:28.000
+Priya: Three days is fine. Any external dependencies?
+
+00:00:28.500 --> 00:00:36.000
+Marcus: Just need the finance bucket credentials from DevOps. Dana, can you get those provisioned by Tuesday?
+
+00:00:36.500 --> 00:00:41.000
+Dana: Yeah, I'll open the access request today. Should be approved well before Tuesday.
+
+00:00:41.500 --> 00:00:50.000
+Priya: Good. Next, the customer dashboard latency issue. Elena, you did the profiling — what did you find?
+
+00:00:50.500 --> 00:01:00.000
+Elena: The widget endpoint makes six sequential database calls. We can batch them into one query and cut response time from two seconds to about three hundred milliseconds.
+
+00:01:00.500 --> 00:01:08.000
+Elena: I'd also add an index on customer_events created_at. That's another half day but worth it.
+
+00:01:08.500 --> 00:01:15.000
+Priya: Agreed, take it. Two days total sounds right. Last item — onboarding email sequence.
+
+00:01:15.500 --> 00:01:24.000
+Sofia: That's mine. Four templated emails triggered by signup events. Two days, assuming copy is final.
+
+00:01:24.500 --> 00:01:30.000
+Priya: Copy is signed off, marketing sent it yesterday. Okay, that's the sprint. Standup same time tomorrow.

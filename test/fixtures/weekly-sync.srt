@@ -1,0 +1,39 @@
+1
+00:00:01,000 --> 00:00:06,000
+Tom: Weekly sync. Let's go around — releases first.
+
+2
+00:00:06,500 --> 00:00:15,000
+Tom: Version 2.4 is scheduled for Thursday. Maya, is the changelog ready?
+
+3
+00:00:15,500 --> 00:00:24,000
+Maya: Changelog is drafted. I still need the migration notes from Chris before I can publish the release announcement.
+
+4
+00:00:24,500 --> 00:00:32,000
+Chris: I'll finish the migration notes by Wednesday morning. The schema changes are already merged and tested on staging.
+
+5
+00:00:32,500 --> 00:00:40,000
+Tom: Good. Support needs at least a day to prepare their macros, so Wednesday morning is the cutoff.
+
+6
+00:00:40,500 --> 00:00:48,000
+Maya: Understood. I'll schedule the announcement for Thursday nine a.m. and flag support in their channel Wednesday afternoon.
+
+7
+00:00:48,500 --> 00:00:57,000
+Tom: Next topic — the search relevance regression from last week's deploy. Chris, status?
+
+8
+00:00:57,500 --> 00:01:08,000
+Chris: Root cause was the synonym list update. I reverted it Friday, metrics are back to normal. I'll re-land it with a canary next sprint after rebuilding the evaluation set.
+
+9
+00:01:08,500 --> 00:01:16,000
+Maya: Can we get a dashboard link in the release checklist so this gets caught before rollout next time?
+
+10
+00:01:16,500 --> 00:01:25,000
+Tom: Yes, add it. Anything else? Okay — Thursday release, Chris has notes Wednesday, Maya publishes after that.

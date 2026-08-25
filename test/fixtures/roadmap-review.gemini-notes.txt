@@ -1,0 +1,31 @@
+Product Roadmap Review - 2026/04/14 10:02 CDT - Notes by Gemini
+
+Invited dana.patel@ellavox.dev Dana Patel marcus.webb@ellavox.dev Marcus Webb priya.sharma@ellavox.dev Priya Sharma
+
+Summary
+The team reviewed Q3 roadmap candidates and agreed to prioritize the mobile offline mode ahead of the reporting revamp. Offline mode is scoped for a beta in six weeks. The reporting revamp moves to early Q4 pending the analytics vendor decision. Two action items were captured around the beta rollout plan and the vendor scorecard.
+
+Details
+Marcus raised that the current sync layer drops queued mutations when the app backgrounded on iOS. Dana will write the rollout plan for the beta including feature-flag gating and a rollback path. Priya presented the vendor scorecard for the analytics replacement; the team asked for a cost comparison at three usage tiers before the next review.
+
+📖 Transcript
+00:00:03
+Priya Sharma: Let's start with the roadmap priorities for Q3.
+00:00:11
+Marcus Webb: I think offline mode has to come first. Enterprise deals keep asking for it.
+00:00:24
+Dana Patel: Agreed. If we scope it to note-taking only, we can ship a beta in about six weeks.
+00:00:38
+Priya Sharma: Six weeks works if we cut voice memos from the beta. Can you own the rollout plan, Dana?
+00:00:49
+Dana Patel: Yes, I'll draft the beta rollout plan with feature flag gating and a rollback path by Friday.
+00:01:02
+Marcus Webb: One risk — the sync layer currently drops queued mutations when the iOS app backgrounds. That needs fixing before any beta.
+00:01:17
+Priya Sharma: Good catch. Log it as a blocking bug for the beta milestone.
+00:01:26
+Priya Sharma: Next, the reporting revamp. Where are we on the analytics vendor decision?
+00:01:35
+Dana Patel: The scorecard is mostly done. The team wants a cost comparison at three usage tiers before we commit.
+00:01:48
+Priya Sharma: Then let's move the revamp to early Q4. Dana, send the scorecard with pricing by next Tuesday.
